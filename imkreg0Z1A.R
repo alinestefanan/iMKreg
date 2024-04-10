@@ -1,16 +1,22 @@
 # y: time series
 # S: seasonal periodicity
-# exvar.beta: covariate column matrix
+# exvar.beta,exvar.nu: covariate column matrix
 # tau: quantil, when set 0.5 is the median
 # resid: 1 = quantile residual, 2 = deviance residual
 # link: "logit", "probit" or "cloglog"
 
-mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,tau=0.5,resid=1,graph=T,print=T,check=F,link="logit")
+mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,resid=1,graph=T,print=T,check=F,link="logit")
 {
   n <- length(y) 
   
-  Z<-rep(1,n)
-  c=0
+  exvar.nu=as.matrix(exvar.nu)
+  c=if(is.matrix(exvar.nu)){ncol(exvar.nu)}else{1}
+  Z<-matrix(c(rep(1,n),exvar.nu), nrow=n, ncol=(c+1), byrow=F)
+  
+  exvar.rho=as.matrix(exvar.rho)
+  m=if(is.matrix(exvar.rho)){ncol(exvar.rho)}else{1}
+  A<-matrix(c(rep(1,n),exvar.rho), nrow=n, ncol=(m+1), byrow=F)
+  
   exvar.beta=as.matrix(exvar.beta)
   k=if(is.matrix(exvar.beta)){ncol(exvar.beta)}else{1}
   X <- matrix(c(rep(1,n),exvar.beta), nrow=n, ncol=(k+1), byrow=F)
@@ -55,10 +61,12 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,tau=0.5,resid=1,graph=T,print=T,ch
   diflink <- link$diflink
   
   #função densidade de probabilidade inflated modified kumaraswamy
-  dmk <- Vectorize(function(y,alpha,beta,lambda0,log = FALSE){
+  dmk <- Vectorize(function(y,alpha,beta,lambda0,lambda1,log = FALSE){
     critical.y=exp(alpha-alpha/y)
     critical.y[is.infinite(critical.y)]<- .Machine$double.xmax
-    density<-ifelse(y==0,lambda0,(1-lambda0)*(alpha*beta*critical.y*(1-critical.y)^(beta-1))/(y^2))
+    density<-ifelse(y!=0 & y!=1,(1-lambda0-lambda1)*(alpha*beta*critical.y*(1-critical.y)^(beta-1))/(y^2),NA)
+    density<-ifelse(y==0,lambda0,density)
+    density<-ifelse(y==1,lambda1,density)
     density[is.na(density)] <- .Machine$double.eps
     density[is.nan(density)] <- .Machine$double.eps
     density[density<.Machine$double.eps] <- .Machine$double.eps
@@ -69,8 +77,10 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,tau=0.5,resid=1,graph=T,print=T,ch
   }) 
   
   #modified kumaraswamy cumulative inflated distribution function 
-  pmk <- Vectorize(function(q,alpha,beta,lambda0,log.p = FALSE){
-    cdf <-  ifelse(y==0,lambda0,lambda0+(1-lambda0)*(1-(1-exp(alpha-alpha/q))^beta))
+  pmk <- Vectorize(function(q,alpha,beta,lambda0,lambda1,log.p = FALSE){
+    cdf <-  ifelse(y!=0 & y!=1,lambda0+(1-lambda0-lambda1)*(1-(1-exp(alpha-alpha/q))^beta),NA)
+    cdf <-  ifelse(y==0,lambda0,cdf)
+    cdf <-  ifelse(y==1,lambda0+lambda1+(1-lambda0-lambda1)*(1-(1-exp(alpha-alpha/q))^beta),cdf)
     cdf[is.na(cdf)]<- .Machine$double.eps
     cdf[cdf<.Machine$double.eps]<-.Machine$double.eps
     cdf[cdf>0.9999999]<-0.9999999
@@ -84,9 +94,12 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,tau=0.5,resid=1,graph=T,print=T,ch
     if(beta<.Machine$double.eps) beta<-.Machine$double.eps
     if (is.infinite(beta)){beta=.Machine$double.xmax}
     lambda0=length(y[which(y==0)])/length(y)
+    lambda1=length(y[which(y==1)])/length(y)
     critical.y=exp(alpha-alpha/y)
     critical.y[is.infinite(critical.y)]<-.Machine$double.xmax
-    density<-ifelse(y==0,lambda0,(1-lambda0)*(alpha*beta*critical.y*(1-critical.y)^(beta-1))/(y^2))
+    density<-ifelse(y!=0 & y!=1,(1-lambda0-lambda1)*(alpha*beta*critical.y*(1-critical.y)^(beta-1))/(y^2),NA)
+    density<-ifelse(y==0,lambda0,density)
+    density<-ifelse(y==1,lambda1,density)
     density[is.na(density)] <- .Machine$double.eps
     density[is.nan(density)] <- .Machine$double.eps
     density[density<.Machine$double.eps]<-.Machine$double.eps
@@ -94,7 +107,7 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,tau=0.5,resid=1,graph=T,print=T,ch
   }
   
   # função quantílica inflated modified kumaraswamy reparametrizada
-  rimk<-function(u,mu,alpha,lambda0)
+  rimk<-function(u,mu,alpha,lambda0,lambda1)
   {
     mu[is.na(mu)] <- .Machine$double.eps
     mu[mu<.Machine$double.eps] <- .Machine$double.eps
@@ -106,7 +119,10 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,tau=0.5,resid=1,graph=T,print=T,ch
     den.cr=log(1-exp(critical))
     den.cr[is.nan(den.cr)]<--36.04365
     beta0_cond<-log(1-tau)/den.cr   
-    y<-ifelse(u<=lambda0,0,alpha/(alpha-log(1-(1-(u-lambda0)/(1-lambda0))^(1/beta0_cond))))
+    y<-ifelse(u<=lambda0,0,NA)
+    y<-ifelse(u>=(1-lambda1),1,y)
+    y<-ifelse(u>lambda0 & u<(1-lambda1),alpha/(alpha-log(1-(1-(u-lambda0)/(1-lambda0-lambda1))^(1/beta0_cond))),y)
+    
     return(y)
   }
   
@@ -114,8 +130,10 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,tau=0.5,resid=1,graph=T,print=T,ch
   {
     beta <- z[1:(k+1)]
     alpha <- z[(k+2)] #mk parameter
-    nu<-z[(k+3)]
-    lambda0<-linkinv(Z*nu)
+    nu<-z[(k+3):(k+3+c)]
+    rho<-z[(k+3+c):(k+3+c+m)]
+    lambda0<-linkinv(Z%*%as.matrix(nu))
+    lambda1<-linkinv(A%*%as.matrix(rho))
     mu <- linkinv(X%*%as.matrix(beta))
     mu[is.na(mu)] <- .Machine$double.eps
     mu[mu<.Machine$double.eps] <- .Machine$double.eps
@@ -131,15 +149,23 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,tau=0.5,resid=1,graph=T,print=T,ch
     critical.ly<-log(1-critical.y)
     critical.ly[is.nan(critical.ly)]<--36.04365
     critical.ly[critical.ly< (-36.04365)]<--36.04365
-    l=ifelse(y==0,log(lambda0),log(1-lambda0)+log(alpha)+alpha-alpha/y+(log(1-tau)/den.cr -1)*critical.ly-2*log(y)+log(log(1-tau)/den.cr))
-    # print("l");print(l)
-    # print("log(alpha)+alpha-alpha/y[i]");print(log(alpha)+alpha-alpha/y[i])
+    l=ifelse(y==0,log(lambda0),NA)
+    l=ifelse(y==1,log(lambda1),l)
+    l=ifelse(y!=0 & y!=1,log(1-lambda0-lambda1)+log(alpha)+alpha-alpha/y+(log(1-tau)/den.cr -1)*critical.ly-2*log(y)+log(log(1-tau)/den.cr),l)
+    print("l");print(l)
+    print("lambda0");print(lambda0)
+    print("lambda1");print(lambda1)
+    # print("log(lambda0)");print(log(lambda0))
+    # print("log(lambda1)");print(log(lambda1))
+    print("log(1-lambda0-lambda1)");print(log(1-lambda0-lambda1))
+    print("log(alpha)+alpha-alpha/y");print(log(alpha)+alpha-alpha/y)
     # print("(log(1-tau)/den.cr[i] -1)*critical.ly[i]");print((log(1-tau)/den.cr[i] -1)*critical.ly[i])
     # print("-2*log(y[i])");print(-2*log(y[i]))
     # print('log(log(1-tau)/den.cr[i])');print(log(log(1-tau)/den.cr[i]))
     # print("l");print(sum(l))
-    # ll <- dmk(y, alpha, log(1-tau)/den.cr, lambda0,log = TRUE)#log-density modified kumaraswamy quantile re-parametrization
-    # print("ll");print(sum(ll))
+    ll <- dmk(y, alpha, log(1-tau)/den.cr, lambda0, lambda1,log = TRUE)#log-density modified kumaraswamy quantile re-parametrization
+    print("ll");print(ll)
+    # print("sum(ll)");print(sum(ll))
     return(sum(l))
   }#fim loglik
   
@@ -147,8 +173,10 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,tau=0.5,resid=1,graph=T,print=T,ch
   {
     beta <- z[1:(k+1)]
     alpha <- z[(k+2)] # mk parameter
-    nu<-z[(k+3)]
-    lambda0<-linkinv(Z*nu)
+    nu<-z[(k+3):(k+3+c)]
+    rho<-z[(k+3+c):(k+3+c+m)]
+    lambda0<-linkinv(Z%*%as.matrix(nu))
+    lambda1<-linkinv(A%*%as.matrix(rho))
     mu <- linkinv(X%*%as.matrix(beta))
     mu[is.na(mu)] <- .Machine$double.eps
     mu[mu<.Machine$double.eps] <- .Machine$double.eps
@@ -169,20 +197,32 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,tau=0.5,resid=1,graph=T,print=T,ch
     ###########################################################################################################
     num1<-exp(alpha)*alpha*(den.cr+log(1-tau)*critical.ly)
     den1<-(mu^2)*(exp(alpha/mu)-exp(alpha))*((den.cr)^2)
-    mustar<-ifelse(y==0,0,num1/den1)
+    mustar<-ifelse(y==0 | y==1,0,num1/den1)
     ########################################################################################################### 
     ####END DERIVATIVE FROM LOG LIKELIHOOD WITH RESPECT TO MU 
     
     ####START DERIVATIVE FROM LOG LIKELIHOOD WITH RESPECT TO LAMBDA0
     ###########################################################################################################
-    lambda0star<-ifelse(y==0,1/lambda0,1/(lambda0-1))
+    lambda0star<-ifelse(y==0,1/lambda0,NA)
+    lambda0star<-ifelse(y==1,0,lambda0star)
+    lambda0star<-ifelse(y!=0 & y!=1,1/(lambda0+lambda1-1),lambda0star)
+    ########################################################################################################### 
+    ####END DERIVATIVE FROM LOG LIKELIHOOD WITH RESPECT TO LAMBDA0 
+    
+    ####START DERIVATIVE FROM LOG LIKELIHOOD WITH RESPECT TO LAMBDA1
+    ###########################################################################################################
+    lambda1star<-ifelse(y==1,1/lambda1,NA)
+    lambda1star<-ifelse(y==0,0,lambda1star)
+    lambda1star<-ifelse(y!=0 & y!=1,1/(lambda0+lambda1-1),lambda1star)
     ########################################################################################################### 
     ####END DERIVATIVE FROM LOG LIKELIHOOD WITH RESPECT TO LAMBDA0 
     
     mT <- diag(as.vector(mu.eta(X%*%as.matrix(beta))))
     l0T <- diag(as.vector(mu.eta(Z%*%as.matrix(nu))))
+    l1T <- diag(as.vector(mu.eta(A%*%as.matrix(rho))))
     Ubeta <-  t(X) %*% mT %*% as.matrix(mustar)
     Unu <-  t(Z) %*% l0T %*% as.matrix(lambda0star)
+    Urho <-  t(a) %*% l1T %*% as.matrix(lambda1star)
     
     ##############################################################################
     ##### START DERIVATIVE FROM LOG LIKELIHOOD WITH RESPECT TO alpha
@@ -197,12 +237,12 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,tau=0.5,resid=1,graph=T,print=T,ch
     ##### END DERIVATIVE FROM LOG LIKELIHOOD WITH RESPECT TO alpha
     ##############################################################################
     
-    return(c(Ubeta,Ualpha,Unu))
+    return(c(Ubeta,Ualpha,Unu,Urho))
   }#end score
   
   # initial values for estimation
-  Ynew = linkfun(y[y!=0])
-  ajuste = lm.fit(X[y!=0,], Ynew)
+  Ynew = linkfun(y[y!=0 & y!=1])
+  ajuste = lm.fit(X[y!=0 & y!=1,], Ynew)
   
   mqo = c(ajuste$coef)
   mqo[is.na(mqo)]<-0
@@ -214,7 +254,7 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,tau=0.5,resid=1,graph=T,print=T,ch
                         upper = c(100),
                         fn = on.dmk.alpha, control=list(max.time=2))
   alpha<-gen.semchute$par
-   reg <- c(mqo, alpha,length(y[y==0])/length(y)) # initializing the parameter values
+  reg <- c(mqo, alpha,length(y[y==0])/length(y),rep(0,c),length(y[y==1])/length(y),rep(0,m)) # initializing the parameter values
   #reg <- c(mqo, 0,length(y[y==0])/length(y),rep(0,c)) # initializing the parameter values
   
   # reg <- c(0,rep(0,k), alpha,length(y[which(y==0)])/length(y),rep(0,c)) # initializing the parameter values
@@ -222,16 +262,16 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,tau=0.5,resid=1,graph=T,print=T,ch
   
   #reg=c(0,0,alpha)
   # reg <- c(mqo,0)
-  # print(reg)
+  print(reg)
   z <- c()
-  opt.error<- tryCatch(optim(reg, loglik, score,
-                             method = "BFGS",
-                             control = list(fnscale = -1)), error = function(e) return("error"))
-  if(opt.error[1] == "error")
-  {z$RMC=1
-  warning("optim error")
-  return(z)
-  }
+  # opt.error<- tryCatch(optim(reg, loglik, score,
+  #                            method = "BFGS",
+  #                            control = list(fnscale = -1)), error = function(e) return("error"))
+  # if(opt.error[1] == "error")
+  # {z$RMC=1
+  # warning("optim error")
+  # return(z)
+  # }
   opt <- optim(reg, loglik, score, 
                method = "BFGS", hessian = T, 
                control = list(fnscale = -1))#, maxit = maxit1, reltol = 1e-12))
@@ -244,18 +284,21 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,tau=0.5,resid=1,graph=T,print=T,ch
   }
   
   z$conv <- opt$conv
-  coef <- (opt$par)[1:(k+3)]
+  coef <- (opt$par)[1:(k+c+3+m)]
   z$coeff <- coef
   z$loglik <- opt$value
   beta <-coef[1:(k+1)] 
   alpha <-coef[(k+2)] # mk parameter
-  nu<-coef[(k+3)]
+  nu<-coef[(k+3):(k+3+c)]
+  rho<-coef[(k+4+c):(k+4+c+m)]
   z$beta <- beta
   z$nu<-nu
+  z$rho<-rho
   z$RMC=0
-  lambda0hat<-linkinv(Z*nu)
+  lambda0hat<-linkinv(Z%*%as.matrix(nu))
+  lambda1hat<-linkinv(A%*%as.matrix(rho))
   muhat <- linkinv(X%*%as.matrix(beta))
-  z$fitted<-ts(rimk(u=rep(0.5,n),mu=muhat,alpha=alpha,lambda0=lambda0hat),start=start(y),frequency=frequency(y)) 
+  z$fitted<-ts(rimk(u=rep(0.5,n),mu=muhat,alpha=alpha,lambda0=lambda0hat,lambda1=lambda1hat),start=start(y),frequency=frequency(y)) 
   # print(z$fitted)
   # plot(z$fitted,type="l")
   
@@ -268,7 +311,7 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,tau=0.5,resid=1,graph=T,print=T,ch
     critical[is.na(critical)]<--.Machine$double.eps
     critical[is.nan(critical)]<--36.04365
     critical[critical< (-36.04365)]<--36.04365
-    den.cr<-log(1-exp(critical))
+    den.cr=log(1-exp(critical))
     den.cr[is.nan(den.cr)]<--36.04365
     e.ay=exp(alpha/y)
     e.ay[is.infinite(e.ay)]<-.Machine$double.xmax
@@ -284,16 +327,33 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,tau=0.5,resid=1,graph=T,print=T,ch
     ###########################################################################################################
     numerador<- ( exp(alpha)*alpha* ( den.cr*( (2*muhat*exp(alpha)+ e.am*(alpha-2*muhat))*log(1-tau)*critical.ly+exp(alpha)*alpha ) + (2*muhat*exp(alpha) +  e.am*(alpha-2*muhat))*den.cr*den.cr + 2*exp(alpha)*alpha*log(1-tau)*critical.ly) ) 
     denominador <-( (muhat^4)*((exp(alpha)- e.am)^2) *den.cr*den.cr*den.cr)
-    muhatstar.sec<-ifelse(y==0,0,numerador/denominador)
+    muhatstar.sec<-ifelse(y==0 |y==1 ,0,numerador/denominador)
     # print("muhatstar.sec");print(muhatstar.sec)
     ########################################################################################################### 
     ####END SECOND DERIVATIVE FROM LOG LIKELIHOOD IN RESPECTO TO MU   
     
     ####START SECOND DERIVATIVE FROM LOG LIKELIHOOD WITH RESPECT TO LAMBDA0
     ###########################################################################################################
-    lambda0hatstar.sec<-ifelse(y==0,-1/(lambda0hat^2),-1/(lambda0hat-1)^2)
+    lambda0hatstar.sec<-ifelse(y==0,-1/(lambda0hat^2),NA)
+    lambda0hatstar.sec<-ifelse(y==1,0,lambda0hatstar.sec)
+    lambda0hatstar.sec<-ifelse(y!=0 & y!=1,-1/(lambda0hat+lambda1hat-1)^2,lambda0hatstar.sec)
     ########################################################################################################### 
     ####END SECOND DERIVATIVE FROM LOG LIKELIHOOD WITH RESPECT TO LAMBDA0 
+    
+    ####START SECOND DERIVATIVE FROM LOG LIKELIHOOD WITH RESPECT TO LAMBDA1
+    ###########################################################################################################
+    lambda1hatstar.sec<-ifelse(y==1,-1/(lambda1hat^2),NA)
+    lambda1hatstar.sec<-ifelse(y==0,0,lambda1hatstar.sec)
+    lambda1hatstar.sec<-ifelse(y!=0 & y!=1,-1/(lambda0hat+lambda1hat-1)^2,lambda1hatstar.sec)
+    ########################################################################################################### 
+    ####END SECOND DERIVATIVE FROM LOG LIKELIHOOD WITH RESPECT TO LAMBDA1 
+    
+    ####START DERIVATIVE FROM [DERIVATIVE FROM LOG LIKELIHOOD IN RESPECT TO LAMBDA1] IN RESPECT TO LAMBDA0
+    ###########################################################################################################
+    lambda0lambda1hat<-ifelse(y==0 | y==1 ,0,-1/(lambda0hat+lambda1hat-1)^2)
+    ###########################################################################################################
+    ####END DERIVATIVE FROM [DERIVATIVE FROM LOG LIKELIHOOD IN RESPECT TO LAMBDA1] IN RESPECT TO LAMBDA0
+    
     
     deta.dbetabeta<- array(0,dim=c((k+1),(k+1),n))
     
@@ -308,9 +368,45 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,tau=0.5,resid=1,graph=T,print=T,ch
       }
     }
     
-    deta.dnunu<- rep(0,n)
+    deta.dnunu<- array(0,dim=c((c+1),(c+1),n))
     
-    ####START SECOND DERIVATIVE FROM LOG LIKELIHOOD IN RESPECT TO ALPHA (CONFERIDA, IGUAL AO ÚLTIMO TERMO DA HESSIANA se usar mu ao invés de muhat)
+    for(i in 1:n)
+    {
+      for(b in 1:(c+1))
+      {
+        for(a in 1:(c+1))
+        {
+          deta.dnunu[a,b,i] <- 0 
+        }
+      }
+    }
+    
+    deta.drhorho<- array(0,dim=c((m+1),(m+1),n))
+    
+    for(i in 1:n)
+    {
+      for(b in 1:(m+1))
+      {
+        for(a in 1:(m+1))
+        {
+          deta.drhorho[a,b,i] <- 0 
+        }
+      }
+    }
+    
+    deta.dnurho<- array(0,dim=c((c+1),(m+1),n))
+    
+    for(i in 1:n)
+    {
+      for(b in 1:(m+1))
+      {
+        for(a in 1:(c+1))
+        {
+          deta.dnurho[a,b,i] <- 0 
+        }
+      }
+    }
+    ####START SECOND DERIVATIVE FROM LOG LIKELIHOOD IN RESPECT TO ALPHA 
     ###########################################################################################################
     num1<-2*((muhat-1)^2)*exp(2*alpha)*log(1-tau)*critical.ly
     den1<-(muhat^2)*((exp(alpha)-e.am)^2)*((den.cr)^3)
@@ -367,11 +463,17 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,tau=0.5,resid=1,graph=T,print=T,ch
     mV0 <- diag(as.vector(mustar))
     mualpha<-diag(as.vector(Umualpha))
     vI <- matrix(rep(1,n),ncol=1)
-    l0T <- diag(as.vector(mu.eta(Z*nu)))
+    l0T <- diag(as.vector(mu.eta(Z%*%as.matrix(nu))))
     num.l0T2<-dif2link(lambda0hat)
-    l0T2<-diag(as.vector(-num.l0T2*(mu.eta(Z*nu)^3)))
+    l0T2<-diag(as.vector(-num.l0T2*(mu.eta(Z%*%as.matrix(nu))^3)))
     l0V <- diag(as.vector(lambda0hatstar.sec))
     l0V0 <- diag(as.vector(lambda0star))
+    l1T <- diag(as.vector(mu.eta(A%*%as.matrix(rho))))
+    num.l1T2<-dif2link(lambda1hat)
+    l1T2<-diag(as.vector(-num.l1T2*(mu.eta(A%*%as.matrix(rho))^3)))
+    l1V <- diag(as.vector(lambda1hatstar.sec))
+    l1V0 <- diag(as.vector(lambda1star))
+    l0l1V<- diag(as.vector(lambda0lambda1hat))
     # print("l0T");print(summary(as.vector(l0T)))
     # print("num.l0T2");print(summary(as.vector(num.l0T2)))
     # print("num.l0T2");print(num.l0T2)
@@ -390,29 +492,62 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,tau=0.5,resid=1,graph=T,print=T,ch
       }
     }
     KBalpha <- -t(X)%*% mualpha %*% mT %*% vI
-    KBnu<-matrix(rep(0,(k+1)),ncol=1)
+    KBnu=matrix(rep(0,(k+1)*(c+1)),ncol=(c+1))
+    KBrho=matrix(rep(0,(k+1)*(m+1)),ncol=(m+1))
     
     KalphaB <- t(KBalpha)
     Kalphaalpha <- -Ualphaalpha
-    Kalphanu<-0
-    
+    Kalphanu<-t(as.matrix(rep(0,c+1)))
+    Kalpharho<-t(as.matrix(rep(0,m+1)))
     KnuB<-t(KBnu)
     Knualpha<-t(Kalphanu)
-    Knunu <- -(t(Z)%*%l0V%*%(l0T^2)%*%Z + t(Z)%*%l0V0%*%l0T2%*%Z + t(vI)%*%l0V0%*%l0T%*%deta.dnunu)
+    Knunu<-matrix(rep(NA,(c+1)*(c+1)),ncol=(c+1))
+    if(length(Knunu)==1){
+      Knunu <- -(t(Z)%*%l0V%*%(l0T^2)%*%Z + t(Z)%*%l0V0%*%l0T2%*%Z + t(vI)%*%l0V0%*%l0T%*%deta.dnunu)
+    }else{
+      for(j in 1:(c+1)){
+        for(i in 1:(c+1)){
+          Knunu[i,j] <- -(t(as.vector(Z[,i]))%*%l0V%*%(l0T^2)%*%as.vector(Z[,j]) + t(as.vector(Z[,i]))%*%l0V0%*%l0T2%*%as.vector(Z[,j]) + t(vI)%*%l0V0%*%l0T%*%as.matrix(deta.dnunu[i,j,]))
+        }
+      }
+    }
+    Knurho<-matrix(rep(NA,(c+1)*(m+1)),ncol=(m+1))
+    if(length(Knurho)==1){
+      Knurho <- -(t(Z)%*%l0l1V%*%l0T%*%l1T%*%A)
+    }else{
+      for(j in 1:(m+1)){
+        for(i in 1:(c+1)){
+          Knurho[i,j] <- -(t(as.vector(Z[,i]))%*%l0l1V%*%l0T%*%l1T%*%as.vector(A[,j]))
+        }
+      }
+    }
     
+    KrhoB<-t(KBrho)
+    Krhoalpha<-t(Kalpharho)
+    Krhonu<-t(Knurho)
+    Krhorho<-matrix(rep(NA,(m+1)*(m+1)),ncol=(m+1))
+    if(length(Krhorho)==1){
+      Krhorho <- -(t(A)%*%l1V%*%(l1T^2)%*%A + t(A)%*%l1V0%*%l0T2%*%A + t(vI)%*%l1V0%*%l1T%*%deta.drhorho)
+    }else{
+      for(j in 1:(m+1)){
+        for(i in 1:(m+1)){
+          Krhorho[i,j] <- -(t(as.vector(A[,i]))%*%l1V%*%(l1T^2)%*%as.vector(A[,j]) + t(as.vector(A[,i]))%*%l1V0%*%l1T2%*%as.vector(A[,j]) + t(vI)%*%l1V0%*%l1T%*%as.matrix(deta.drhorho[i,j,]))
+        }
+      }
+    }
     # print(KBB);print(KBalpha);print(KBnu)
     # print(KalphaB);print(Kalphaalpha);print(Kalphanu)
     # print(KnuB);print(Knualpha);print(Knunu)
     K <- rbind(
-      cbind(KBB,KBalpha,KBnu),
-      cbind(KalphaB,Kalphaalpha,Kalphanu),
-      cbind(KnuB,Knualpha,Knunu)
+      cbind(KBB,KBalpha,KBnu,KBrho),
+      cbind(KalphaB,Kalphaalpha,Kalphanu,Kalpharho),
+      cbind(KnuB,Knualpha,Knunu,Knurho),
+      cbind(KrhoB,Krhoalpha,Krhonu,Krhorho)
     )
     return(K)
   }
   K<-obs.inf(y,muhat)
-  # print(K)
-  # print(solve(K))
+  
   Ksolve<- tryCatch(solve(K), error = function(e) return("error"))
   if(Ksolve[1] == "error")
   {z$RMC=1#used at Monte-Carlo simulation for discard from the sample
@@ -443,10 +578,10 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,tau=0.5,resid=1,graph=T,print=T,ch
   LI<-z$coeff-qnorm(0.975)*sqrt(v)
   LS<-z$coeff+qnorm(0.975)*sqrt(v)
   z$pvalues<-(1-pnorm(abs(z$zstat)))*2
-  first_col<-c(0:k,"alpha",0:c)
+  first_col<-c(0:k,"alpha",0:c,0:m)
   result <- matrix(c(first_col,round(c(z$coeff,z$zstat,LI,LS,z$pvalues),4),resp), nrow=length(z$coeff), ncol=7, byrow=F)
   colnames(result) <- c("Estimator","MLE","Wald's Statistic","Lower bound","Upper bound","p-value","Wald'S Test result")
-  rownames(result)<-c(rep("beta",(k+1)),"",rep("nu",(c+1)))
+  rownames(result)<-c(rep("beta",(k+1)),"",rep("nu",(c+1)),rep("rho",(m+1)))
   z$coef.result<-result
   z$aic <- -2*(z$loglik)+2*(length(opt$par)) 
   z$bic <- -2*(z$loglik)+(length(opt$par))*log(n)
@@ -508,7 +643,7 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,tau=0.5,resid=1,graph=T,print=T,ch
   den.cr=log(1-exp(critical))
   den.cr[is.nan(den.cr)]<--36.04365
   
-  z$resid1 <- as.vector(qnorm(pmk(y,alpha, log(1-tau)/den.cr,lambda0=lambda0hat,log.p = FALSE ) ))
+  z$resid1 <- as.vector(qnorm(pmk(y,alpha, log(1-tau)/den.cr,lambda0=lambda0hat,lambda1=lambda1hat,log.p = FALSE ) ))
   # print(z$resid1)
   mresult<-matrix(round(c(z$loglik,z$aic,z$bic),4),nrow=3,ncol=1)
   rownames(mresult)<-c("Log-likelihood","AIC","BIC")
@@ -600,7 +735,148 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,tau=0.5,resid=1,graph=T,print=T,ch
       }
       dev.off()
     }
-    
+    pdf("cor_y_covZ.pdf",width=5, height=4)
+    {
+      if (c<=3){
+        par(mfrow=c(1,c))
+        par(mar=c(2.8, 2.7, 1, 1))
+        par(mgp=c(1.7, 0.45, 0))}
+      # for (i in k){
+      # plot(as.vector(X[,1+i]),as.vector(y),main=" ",xlab=paste("Cov ",i),ylab="y")
+      # }
+      if(c==1){
+        plot(as.vector(Z[,2]),as.vector(y),main=" ",xlab=paste("Cov Z1"),ylab="y")#,legend("topleft",paste("cor=",cor(X[,2],y))))#,#pch=vpch,
+        text(x = median(as.vector(Z[,2])), y = median(as.vector(y)), label = paste("cor=",round(cor(Z[,2],y),4)), cex = 1)
+      }
+      if (c==2){
+        plot(as.vector(Z[,2]),as.vector(y),main=" ",xlab=paste("Cov Z1"),ylab="y")#,legend("topleft",paste("cor=",cor(X[,2],y))))
+        text(x = median(as.vector(Z[,2])), y = median(as.vector(y)), label = paste("cor=",round(cor(Z[,2],y),4)), cex = 1)
+        
+        plot(as.vector(Z[,3]),as.vector(y),main=" ",xlab=paste("Cov Z2"),ylab="y")
+        text(x = median(as.vector(Z[,3])), y = median(as.vector(y)), label = paste("cor=",round(cor(Z[,3],y),4)), cex = 1)
+      }
+      if (c==3){
+        plot(as.vector(Z[,2]),as.vector(y),main=" ",xlab=paste("Cov Z1"),ylab="y")#,legend("topleft",paste("cor=",cor(X[,2],y)),pt.bg="white", lty=c(1,2), bty="n"))
+        text(x = median(as.vector(Z[,2])), y = median(as.vector(y)), label = paste("cor=",round(cor(Z[,2],y),4)), cex = 1)
+        
+        plot(as.vector(Z[,3]),as.vector(y),main=" ",xlab=paste("Cov Z2"),ylab="y")
+        text(x = median(as.vector(Z[,3])), y = median(as.vector(y)), label = paste("cor=",round(cor(Z[,3],y),4)), cex = 1)
+        
+        plot(as.vector(Z[,4]),as.vector(y),main=" ",xlab=paste("Cov Z3"),ylab="y")
+        text(x = median(as.vector(Z[,4])), y = median(as.vector(y)), label = paste("cor=",round(cor(Z[,4],y),4)), cex = 1)
+      }
+    }
+    dev.off()
+    if(c>1){
+      pdf("cor_covZ_covZ.pdf",width=5, height=4)
+      {
+        if (c==2){
+          par(mfrow=c(1,1))
+          par(mar=c(2.8, 2.7, 1, 1))
+          par(mgp=c(1.7, 0.45, 0))
+          
+          plot(as.vector(Z[,3]),as.vector(Z[,2]),main=" ",xlab=paste("Cov Z2"),ylab="Cov Z1")
+          text(x = median(as.vector(Z[,3])), y = median(as.vector(Z[,2])), label = paste("cor=",round(cor(Z[,3],Z[,2]),4)), cex = 1)
+        }
+        if (c==3){
+          par(mfrow=c(1,3))
+          par(mar=c(2.8, 2.7, 1, 1))
+          par(mgp=c(1.7, 0.45, 0))
+          
+          plot(as.vector(Z[,3]),as.vector(Z[,2]),main=" ",xlab=paste("Cov Z2"),ylab="Cov Z1")
+          text(x = median(as.vector(Z[,3])), y = median(as.vector(Z[,2])), label = paste("cor=",round(cor(Z[,3],Z[,2]),4)), cex = 1)
+          
+          plot(as.vector(Z[,4]),as.vector(Z[,2]),main=" ",xlab=paste("Cov Z3"),ylab="Cov Z1")
+          text(x = median(as.vector(Z[,4])), y = median(as.vector(Z[,2])), label = paste("cor=",round(cor(Z[,4],Z[,2]),4)), cex = 1)
+          
+          plot(as.vector(Z[,4]),as.vector(Z[,3]),main=" ",xlab=paste("Cov Z3"),ylab="Cov Z2")
+          text(x = median(as.vector(Z[,4])), y = median(as.vector(Z[,3])), label = paste("cor=",round(cor(Z[,4],Z[,3]),4)), cex = 1)
+          
+        }
+      }
+      dev.off()
+      
+      pdf("cor_matrix_covZ.pdf",width=5, height=4)
+      {
+        par(mfrow=c(1,1))
+        par(mar=c(2.8, 2.7, 1, 1))
+        par(mgp=c(1.7, 0.45, 0))
+        library(corrplot)
+        corrplot(cor(exvar.nu),method='number')              # visualize the multicollinearity
+      }
+      dev.off()
+    }
+    pdf("cor_y_covA.pdf",width=5, height=4)
+    {
+      if (m<=3){
+        par(mfrow=c(1,m))
+        par(mar=c(2.8, 2.7, 1, 1))
+        par(mgp=c(1.7, 0.45, 0))}
+      # for (i in k){
+      # plot(as.vector(X[,1+i]),as.vector(y),main=" ",xlab=paste("Cov ",i),ylab="y")
+      # }
+      if(m==1){
+        plot(as.vector(A[,2]),as.vector(y),main=" ",xlab=paste("Cov A1"),ylab="y")#,legend("topleft",paste("cor=",cor(X[,2],y))))#,#pch=vpch,
+        text(x = median(as.vector(A[,2])), y = median(as.vector(y)), label = paste("cor=",round(cor(A[,2],y),4)), cex = 1)
+      }
+      if (m==2){
+        plot(as.vector(A[,2]),as.vector(y),main=" ",xlab=paste("Cov A1"),ylab="y")#,legend("topleft",paste("cor=",cor(X[,2],y))))
+        text(x = median(as.vector(A[,2])), y = median(as.vector(y)), label = paste("cor=",round(cor(A[,2],y),4)), cex = 1)
+        
+        plot(as.vector(A[,3]),as.vector(y),main=" ",xlab=paste("Cov A2"),ylab="y")
+        text(x = median(as.vector(A[,3])), y = median(as.vector(y)), label = paste("cor=",round(cor(A[,3],y),4)), cex = 1)
+      }
+      if (m==3){
+        plot(as.vector(A[,2]),as.vector(y),main=" ",xlab=paste("Cov A1"),ylab="y")#,legend("topleft",paste("cor=",cor(X[,2],y)),pt.bg="white", lty=c(1,2), bty="n"))
+        text(x = median(as.vector(A[,2])), y = median(as.vector(y)), label = paste("cor=",round(cor(A[,2],y),4)), cex = 1)
+        
+        plot(as.vector(A[,3]),as.vector(y),main=" ",xlab=paste("Cov A2"),ylab="y")
+        text(x = median(as.vector(A[,3])), y = median(as.vector(y)), label = paste("cor=",round(cor(A[,3],y),4)), cex = 1)
+        
+        plot(as.vector(A[,4]),as.vector(y),main=" ",xlab=paste("Cov A3"),ylab="y")
+        text(x = median(as.vector(A[,4])), y = median(as.vector(y)), label = paste("cor=",round(cor(A[,4],y),4)), cex = 1)
+      }
+    }
+    dev.off()
+    if(m>1){
+      pdf("cor_covA_covA.pdf",width=5, height=4)
+      {
+        if (m==2){
+          par(mfrow=c(1,1))
+          par(mar=c(2.8, 2.7, 1, 1))
+          par(mgp=c(1.7, 0.45, 0))
+          
+          plot(as.vector(A[,3]),as.vector(A[,2]),main=" ",xlab=paste("Cov A2"),ylab="Cov A1")
+          text(x = median(as.vector(A[,3])), y = median(as.vector(A[,2])), label = paste("cor=",round(cor(A[,3],A[,2]),4)), cex = 1)
+        }
+        if (m==3){
+          par(mfrow=c(1,3))
+          par(mar=c(2.8, 2.7, 1, 1))
+          par(mgp=c(1.7, 0.45, 0))
+          
+          plot(as.vector(A[,3]),as.vector(A[,2]),main=" ",xlab=paste("Cov A2"),ylab="Cov A1")
+          text(x = median(as.vector(A[,3])), y = median(as.vector(A[,2])), label = paste("cor=",round(cor(A[,3],A[,2]),4)), cex = 1)
+          
+          plot(as.vector(A[,4]),as.vector(A[,2]),main=" ",xlab=paste("Cov A3"),ylab="Cov A1")
+          text(x = median(as.vector(A[,4])), y = median(as.vector(A[,2])), label = paste("cor=",round(cor(A[,4],A[,2]),4)), cex = 1)
+          
+          plot(as.vector(A[,4]),as.vector(A[,3]),main=" ",xlab=paste("Cov A3"),ylab="Cov A2")
+          text(x = median(as.vector(A[,4])), y = median(as.vector(A[,3])), label = paste("cor=",round(cor(A[,4],A[,3]),4)), cex = 1)
+          
+        }
+      }
+      dev.off()
+      
+      pdf("cor_matrix_covA.pdf",width=5, height=4)
+      {
+        par(mfrow=c(1,1))
+        par(mar=c(2.8, 2.7, 1, 1))
+        par(mgp=c(1.7, 0.45, 0))
+        library(corrplot)
+        corrplot(cor(exvar.rho),method='number')              # visualize the multicollinearity
+      }
+      dev.off()
+    }
     pdf("resid_v_ind.pdf",width=5, height=4)
     {
       par(mfrow=c(1,1))
@@ -699,7 +975,9 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,tau=0.5,resid=1,graph=T,print=T,ch
     beta <- z[1]
     alpha <- z[2]
     nu<-z[3]
+    rho<-z[4]
     lambda0<-linkinv(Z[,1]*nu)
+    lambda1<-linkinv(A[,1]*rho)
     mu <- linkinv(X[,1]*beta)
     mu[is.na(mu)]<-.Machine$double.eps
     mu[mu<.Machine$double.eps]<-.Machine$double.eps
@@ -715,11 +993,13 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,tau=0.5,resid=1,graph=T,print=T,ch
     critical.ly<-log(1-critical.y)
     critical.ly[is.nan(critical.ly)]<--36.04365
     critical.ly[critical.ly< (-36.04365)]<--36.04365#para exp dar .Machine$double.eps
-    l=ifelse(y==0,log(lambda0),log(1-lambda0)+log(alpha)+alpha-alpha/y+(log(1-tau)/den.cr -1)*critical.ly-2*log(y)+log(log(1-tau)/den.cr))
+    l=ifelse(y==0,log(lambda0),NA)
+    l=ifelse(y==1,log(lambda1),l)
+    l=ifelse(y!=0 & y!=1,log(1-lambda0-lambda1)+log(alpha)+alpha-alpha/y+(log(1-tau)/den.cr -1)*critical.ly-2*log(y)+log(log(1-tau)/den.cr),l)
     return(sum(l))
   }
   
-  ini_null<- c(mean(z$fitted),reg[k+2],length(y[y==0])/n)
+  ini_null<- c(mean(z$fitted),reg[k+2],length(y[y==0])/n,length(y[y==1])/n)
   # print(ini_null)
   opti.error<- tryCatch(optim(ini_null, loglik_null,method = "BFGS", control = list(fnscale = -1)), error = function(e) return("error"))
   if(opti.error[1] == "error")
@@ -807,7 +1087,7 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,tau=0.5,resid=1,graph=T,print=T,ch
   z$p_durbin<-durbin$p.value
   #null hypothesis: non-multicollinearity
   z$cor.beta <- cor(exvar.beta)                                         # independent variables correlation matrix 
-  
+  z$cor.nu <- cor(exvar.nu)
   #null hypothesis: non-heteroscedasticity (constant variance)
    SBP<-function(resi){#adapted to fits a linear regression model to the residuals of the mkreg model 
     sigma2 <- sum(resi^2)/length(resi)
