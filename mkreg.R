@@ -108,6 +108,7 @@ mkreg <- function(y,exvar=NA,tau=0.5,resid=1,graph=T,print=T,check=F,link="logit
     critical.ly[is.nan(critical.ly)]<--36.04365
     critical.ly[critical.ly< (-36.04365)]<--36.04365#para exp dar .Machine$double.eps
     l=log(alpha)+alpha-alpha/y+(log(1-tau)/den.cr -1)*critical.ly-2*log(y)+log(log(1-tau)/den.cr)
+    # print("alpha");print(alpha)
     # print("l");print(sum(l))
     # ll <- dmk(y, alpha, log(1-tau)/den.cr, log = TRUE)#log-density modified kumaraswamy quantile re-parametrization
     # print("ll");print(sum(ll))
@@ -653,7 +654,7 @@ mkreg <- function(y,exvar=NA,tau=0.5,resid=1,graph=T,print=T,check=F,link="logit
     return(sum(l))
   }
   # ini_null<- c(reg[1],reg[length(opt$par)])
-  ini_null<- c(mean(z$fitted),reg[length(opt$par)])
+  ini_null<- c(linkfun(mean(y)),reg[length(opt$par)])
   opti.error<- tryCatch(optim(ini_null, loglik_null,method = "BFGS", control = list(fnscale = -1)), error = function(e) return("error"))
   if(opti.error[1] == "error")
   {z$r2 <-NA

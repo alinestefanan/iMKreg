@@ -413,7 +413,7 @@ mkreg <- function(y,exvar.beta=NA,exvar.rho=NA,tau=0.5,resid=1,graph=T,print=T,c
     Krhoalpha<-t(Kalpharho)
     Krhorho<-matrix(rep(NA,(m+1)*(m+1)),ncol=(m+1))
     if(length(Krhorho)==1){
-      Krhorho <- -(t(A)%*%l1V%*%(l1T^2)%*%A + t(A)%*%l1V0%*%l0T2%*%A + t(vI)%*%l1V0%*%l1T%*%deta.drhorho)
+      Krhorho <- -(t(A)%*%l1V%*%(l1T^2)%*%A + t(A)%*%l1V0%*%l1T2%*%A + t(vI)%*%l1V0%*%l1T%*%deta.drhorho)
     }else{
       for(j in 1:(m+1)){
         for(i in 1:(m+1)){
@@ -810,7 +810,7 @@ mkreg <- function(y,exvar.beta=NA,exvar.rho=NA,tau=0.5,resid=1,graph=T,print=T,c
     return(sum(l))
   }
   
-  ini_null<- c(mean(z$fitted),reg[k+2],length(y[y==1])/n)
+  ini_null<- c(linkfun(mean(y[y!=1])),reg[k+2],length(y[y==1])/n)
   # print(ini_null)
   opti.error<- tryCatch(optim(ini_null, loglik_null,method = "BFGS", control = list(fnscale = -1)), error = function(e) return("error"))
   if(opti.error[1] == "error")

@@ -1,4 +1,4 @@
-envelope.mkreg<-function(residual,n,beta,exvar,alpha,tau,link="logit")
+envelope.mkreg<-function(residual,n,beta,exvar,alpha,tau,link="logit",conf=0.95)
 {
   source("sample.mkreg.R")
   source("mkreg-env.R")
@@ -14,12 +14,18 @@ envelope.mkreg<-function(residual,n,beta,exvar,alpha,tau,link="logit")
       }
   }
   m <- apply(sr,1,mean)
-  lb<-ub<-c()
-  for(i in 1:n){
-    eo <- sort(sr[i,])
-    lb[i] <- (eo[2]+eo[3])/2
-    ub[i] <- (eo[97]+eo[98])/2
+  qlb<-function(x)
+  {
+    quantile(x,(1-conf)/2)
   }
+  qub<-function(x)
+  {
+    quantile(x,1-(1-conf)/2)
+  }
+  
+  lb<-apply(sr,1,qlb)
+  ub<-apply(sr,1,qub)
+  
   tb <- range(residual,lb,ub)
   par(pty="s")
   qqnorm(residual,main="",xlab="Normal quantile",ylab="Empirical quantile", ylim=tb, pch=16)

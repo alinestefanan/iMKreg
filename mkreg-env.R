@@ -107,11 +107,12 @@ mkreg.env <- function(y,exvar=NA,tau=0.5,resid=1,graph=T,print=T,check=F,link="l
     critical.ly<-log(1-critical.y)
     critical.ly[is.nan(critical.ly)]<--36.04365
     critical.ly[critical.ly< (-36.04365)]<--36.04365#para exp dar .Machine$double.eps
-    l=log(alpha)+alpha-alpha/y+(log(1-tau)/den.cr -1)*critical.ly-2*log(y)+log(log(1-tau)/den.cr)
+    # l=log(alpha)+alpha-alpha/y+(log(1-tau)/den.cr -1)*critical.ly-2*log(y)+log(log(1-tau)/den.cr)
     # print("l");print(sum(l))
-    # ll <- dmk(y, alpha, log(1-tau)/den.cr, log = TRUE)#log-density modified kumaraswamy quantile re-parametrization
+    ll <- dmk(y, alpha, log(1-tau)/den.cr, log = TRUE)#log-density modified kumaraswamy quantile re-parametrization
+    return(sum(ll))
     # print("ll");print(sum(ll))
-    return(sum(l))
+    # return(sum(l))
   }#fim loglik
   
   score <- function(z) 

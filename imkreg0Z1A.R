@@ -16,7 +16,7 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,resid=1,graph
   exvar.rho=as.matrix(exvar.rho)
   m=if(is.matrix(exvar.rho)){ncol(exvar.rho)}else{1}
   A<-matrix(c(rep(1,n),exvar.rho), nrow=n, ncol=(m+1), byrow=F)
-  
+  # print("A");print(A)
   exvar.beta=as.matrix(exvar.beta)
   k=if(is.matrix(exvar.beta)){ncol(exvar.beta)}else{1}
   X <- matrix(c(rep(1,n),exvar.beta), nrow=n, ncol=(k+1), byrow=F)
@@ -61,12 +61,12 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,resid=1,graph
   diflink <- link$diflink
   
   #função densidade de probabilidade inflated modified kumaraswamy
-  dmk <- Vectorize(function(y,alpha,beta,lambda0,lambda1,log = FALSE){
+  dmk <- Vectorize(function(y,alpha,beta,lambda,p,log = FALSE){
     critical.y=exp(alpha-alpha/y)
     critical.y[is.infinite(critical.y)]<- .Machine$double.xmax
-    density<-ifelse(y!=0 & y!=1,(1-lambda0-lambda1)*(alpha*beta*critical.y*(1-critical.y)^(beta-1))/(y^2),NA)
-    density<-ifelse(y==0,lambda0,density)
-    density<-ifelse(y==1,lambda1,density)
+    density<-ifelse(y!=0 & y!=1,(1-lambda)*(alpha*beta*critical.y*(1-critical.y)^(beta-1))/(y^2),NA)
+    density<-ifelse(y==0,lambda*(1-p),density)
+    density<-ifelse(y==1,lambda*p,density)
     density[is.na(density)] <- .Machine$double.eps
     density[is.nan(density)] <- .Machine$double.eps
     density[density<.Machine$double.eps] <- .Machine$double.eps
@@ -77,10 +77,10 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,resid=1,graph
   }) 
   
   #modified kumaraswamy cumulative inflated distribution function 
-  pmk <- Vectorize(function(q,alpha,beta,lambda0,lambda1,log.p = FALSE){
-    cdf <-  ifelse(y!=0 & y!=1,lambda0+(1-lambda0-lambda1)*(1-(1-exp(alpha-alpha/q))^beta),NA)
-    cdf <-  ifelse(y==0,lambda0,cdf)
-    cdf <-  ifelse(y==1,lambda0+lambda1+(1-lambda0-lambda1)*(1-(1-exp(alpha-alpha/q))^beta),cdf)
+  pmk <- Vectorize(function(q,alpha,beta,lambda,p,log.p = FALSE){
+    cdf <-  ifelse(y!=0 & y!=1,lambda*(1-p)+(1-lambda)*(1-(1-exp(alpha-alpha/q))^beta),NA)
+    cdf <-  ifelse(y==0,lambda*(1-p),cdf)
+    cdf <-  ifelse(y==1,lambda*(1-p)+lambda*p+(1-lambda)*(1-(1-exp(alpha-alpha/q))^beta),cdf)
     cdf[is.na(cdf)]<- .Machine$double.eps
     cdf[cdf<.Machine$double.eps]<-.Machine$double.eps
     cdf[cdf>0.9999999]<-0.9999999
@@ -93,13 +93,13 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,resid=1,graph
     if (is.na(beta)){beta=.Machine$double.eps}
     if(beta<.Machine$double.eps) beta<-.Machine$double.eps
     if (is.infinite(beta)){beta=.Machine$double.xmax}
-    lambda0=length(y[which(y==0)])/length(y)
-    lambda1=length(y[which(y==1)])/length(y)
+    lambda=length(y[which(y==0 | y==1)])/length(y)
+    p=length(y[which(y==1)])/length(y)
     critical.y=exp(alpha-alpha/y)
     critical.y[is.infinite(critical.y)]<-.Machine$double.xmax
-    density<-ifelse(y!=0 & y!=1,(1-lambda0-lambda1)*(alpha*beta*critical.y*(1-critical.y)^(beta-1))/(y^2),NA)
-    density<-ifelse(y==0,lambda0,density)
-    density<-ifelse(y==1,lambda1,density)
+    density<-ifelse(y!=0 & y!=1,(1-lambda)*(alpha*beta*critical.y*(1-critical.y)^(beta-1))/(y^2),NA)
+    density<-ifelse(y==0,lambda*(1-p),density)
+    density<-ifelse(y==1,lambda*p,density)
     density[is.na(density)] <- .Machine$double.eps
     density[is.nan(density)] <- .Machine$double.eps
     density[density<.Machine$double.eps]<-.Machine$double.eps
@@ -107,7 +107,7 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,resid=1,graph
   }
   
   # função quantílica inflated modified kumaraswamy reparametrizada
-  rimk<-function(u,mu,alpha,lambda0,lambda1)
+  rimk<-function(u,mu,alpha,lambda,p)
   {
     mu[is.na(mu)] <- .Machine$double.eps
     mu[mu<.Machine$double.eps] <- .Machine$double.eps
@@ -119,9 +119,9 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,resid=1,graph
     den.cr=log(1-exp(critical))
     den.cr[is.nan(den.cr)]<--36.04365
     beta0_cond<-log(1-tau)/den.cr   
-    y<-ifelse(u<=lambda0,0,NA)
-    y<-ifelse(u>=(1-lambda1),1,y)
-    y<-ifelse(u>lambda0 & u<(1-lambda1),alpha/(alpha-log(1-(1-(u-lambda0)/(1-lambda0-lambda1))^(1/beta0_cond))),y)
+    y<-ifelse(u<=lambda*(1-p),0,NA)
+    y<-ifelse(u>=(1-lambda*p),1,y)
+    y<-ifelse(u>lambda*(1-p) & u<(1-lambda*p),alpha/(alpha-log(1-(1-(u-lambda*(1-p))/(1-lambda))^(1/beta0_cond))),y)
     
     return(y)
   }
@@ -131,9 +131,9 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,resid=1,graph
     beta <- z[1:(k+1)]
     alpha <- z[(k+2)] #mk parameter
     nu<-z[(k+3):(k+3+c)]
-    rho<-z[(k+3+c):(k+3+c+m)]
-    lambda0<-linkinv(Z%*%as.matrix(nu))
-    lambda1<-linkinv(A%*%as.matrix(rho))
+    rho<-z[(k+4+c):(k+4+c+m)]
+    lambda<-linkinv(Z%*%as.matrix(nu))
+    p<-linkinv(A%*%as.matrix(rho))
     mu <- linkinv(X%*%as.matrix(beta))
     mu[is.na(mu)] <- .Machine$double.eps
     mu[mu<.Machine$double.eps] <- .Machine$double.eps
@@ -149,22 +149,17 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,resid=1,graph
     critical.ly<-log(1-critical.y)
     critical.ly[is.nan(critical.ly)]<--36.04365
     critical.ly[critical.ly< (-36.04365)]<--36.04365
-    l=ifelse(y==0,log(lambda0),NA)
-    l=ifelse(y==1,log(lambda1),l)
-    l=ifelse(y!=0 & y!=1,log(1-lambda0-lambda1)+log(alpha)+alpha-alpha/y+(log(1-tau)/den.cr -1)*critical.ly-2*log(y)+log(log(1-tau)/den.cr),l)
-    print("l");print(l)
-    print("lambda0");print(lambda0)
-    print("lambda1");print(lambda1)
-    # print("log(lambda0)");print(log(lambda0))
-    # print("log(lambda1)");print(log(lambda1))
-    print("log(1-lambda0-lambda1)");print(log(1-lambda0-lambda1))
-    print("log(alpha)+alpha-alpha/y");print(log(alpha)+alpha-alpha/y)
+    l=ifelse(y==0,log(lambda)+log(1-p),NA)
+    l=ifelse(y==1,log(lambda)+log(p),l)
+    l=ifelse(y!=0 & y!=1,log(1-lambda)+log(alpha)+alpha-alpha/y+(log(1-tau)/den.cr -1)*critical.ly-2*log(y)+log(log(1-tau)/den.cr),l)
+    # print("l");print(l)
+    # print("log(alpha)+alpha-alpha/y");print(log(alpha)+alpha-alpha/y)
     # print("(log(1-tau)/den.cr[i] -1)*critical.ly[i]");print((log(1-tau)/den.cr[i] -1)*critical.ly[i])
     # print("-2*log(y[i])");print(-2*log(y[i]))
     # print('log(log(1-tau)/den.cr[i])');print(log(log(1-tau)/den.cr[i]))
     # print("l");print(sum(l))
-    ll <- dmk(y, alpha, log(1-tau)/den.cr, lambda0, lambda1,log = TRUE)#log-density modified kumaraswamy quantile re-parametrization
-    print("ll");print(ll)
+    # ll <- dmk(y, alpha, log(1-tau)/den.cr, lambda, p,log = TRUE)#log-density modified kumaraswamy quantile re-parametrization
+    # print("ll");print(ll)
     # print("sum(ll)");print(sum(ll))
     return(sum(l))
   }#fim loglik
@@ -174,9 +169,9 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,resid=1,graph
     beta <- z[1:(k+1)]
     alpha <- z[(k+2)] # mk parameter
     nu<-z[(k+3):(k+3+c)]
-    rho<-z[(k+3+c):(k+3+c+m)]
-    lambda0<-linkinv(Z%*%as.matrix(nu))
-    lambda1<-linkinv(A%*%as.matrix(rho))
+    rho<-z[(k+4+c):(k+4+c+m)]
+    lambda<-linkinv(Z%*%as.matrix(nu))
+    p<-linkinv(A%*%as.matrix(rho))
     mu <- linkinv(X%*%as.matrix(beta))
     mu[is.na(mu)] <- .Machine$double.eps
     mu[mu<.Machine$double.eps] <- .Machine$double.eps
@@ -201,28 +196,28 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,resid=1,graph
     ########################################################################################################### 
     ####END DERIVATIVE FROM LOG LIKELIHOOD WITH RESPECT TO MU 
     
-    ####START DERIVATIVE FROM LOG LIKELIHOOD WITH RESPECT TO LAMBDA0
+    ####START DERIVATIVE FROM LOG LIKELIHOOD WITH RESPECT TO LAMBDA
     ###########################################################################################################
-    lambda0star<-ifelse(y==0,1/lambda0,NA)
-    lambda0star<-ifelse(y==1,0,lambda0star)
-    lambda0star<-ifelse(y!=0 & y!=1,1/(lambda0+lambda1-1),lambda0star)
+    lambdastar<-ifelse(y==0,1/lambda,NA)
+    lambdastar<-ifelse(y==1,1/lambda,lambdastar)
+    lambdastar<-ifelse(y!=0 & y!=1,-1/(1-lambda),lambdastar)
     ########################################################################################################### 
-    ####END DERIVATIVE FROM LOG LIKELIHOOD WITH RESPECT TO LAMBDA0 
+    ####END DERIVATIVE FROM LOG LIKELIHOOD WITH RESPECT TO LAMBDA 
     
-    ####START DERIVATIVE FROM LOG LIKELIHOOD WITH RESPECT TO LAMBDA1
+    ####START DERIVATIVE FROM LOG LIKELIHOOD WITH RESPECT TO p
     ###########################################################################################################
-    lambda1star<-ifelse(y==1,1/lambda1,NA)
-    lambda1star<-ifelse(y==0,0,lambda1star)
-    lambda1star<-ifelse(y!=0 & y!=1,1/(lambda0+lambda1-1),lambda1star)
+    pstar<-ifelse(y==1,1/p,NA)
+    pstar<-ifelse(y==0,-1/(1-p),pstar)
+    pstar<-ifelse(y!=0 & y!=1,0,pstar)
     ########################################################################################################### 
-    ####END DERIVATIVE FROM LOG LIKELIHOOD WITH RESPECT TO LAMBDA0 
+    ####END DERIVATIVE FROM LOG LIKELIHOOD WITH RESPECT TO p
     
     mT <- diag(as.vector(mu.eta(X%*%as.matrix(beta))))
-    l0T <- diag(as.vector(mu.eta(Z%*%as.matrix(nu))))
-    l1T <- diag(as.vector(mu.eta(A%*%as.matrix(rho))))
+    lT <- diag(as.vector(mu.eta(Z%*%as.matrix(nu))))
+    pT <- diag(as.vector(mu.eta(A%*%as.matrix(rho))))
     Ubeta <-  t(X) %*% mT %*% as.matrix(mustar)
-    Unu <-  t(Z) %*% l0T %*% as.matrix(lambda0star)
-    Urho <-  t(a) %*% l1T %*% as.matrix(lambda1star)
+    Unu <-  t(Z) %*% lT %*% as.matrix(lambdastar)
+    Urho <-  t(A) %*% pT %*% as.matrix(pstar)
     
     ##############################################################################
     ##### START DERIVATIVE FROM LOG LIKELIHOOD WITH RESPECT TO alpha
@@ -232,7 +227,7 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,resid=1,graph
     num2.part2<-(log(1-tau)/den.cr-1)
     den2<-y-y*critical.y
     den3<- mu*(exp(alpha/mu)-exp(alpha))*den.cr
-    Ua<-ifelse(y==0,0,1+1/alpha+num1/den1-num2.part1*num2.part2/den2+((mu-1)*exp(alpha))/den3-1/y)
+    Ua<-ifelse(y==0 | y==1,0,1+1/alpha+num1/den1-num2.part1*num2.part2/den2+((mu-1)*exp(alpha))/den3-1/y)
     Ualpha<-sum(Ua)
     ##### END DERIVATIVE FROM LOG LIKELIHOOD WITH RESPECT TO alpha
     ##############################################################################
@@ -254,7 +249,7 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,resid=1,graph
                         upper = c(100),
                         fn = on.dmk.alpha, control=list(max.time=2))
   alpha<-gen.semchute$par
-  reg <- c(mqo, alpha,length(y[y==0])/length(y),rep(0,c),length(y[y==1])/length(y),rep(0,m)) # initializing the parameter values
+  reg <- c(mqo, alpha,length(y[y==0|y==1])/n,rep(0,c),length(y[y==1])/length(y[y==0|y==1]),rep(0,m)) # initializing the parameter values
   #reg <- c(mqo, 0,length(y[y==0])/length(y),rep(0,c)) # initializing the parameter values
   
   # reg <- c(0,rep(0,k), alpha,length(y[which(y==0)])/length(y),rep(0,c)) # initializing the parameter values
@@ -262,7 +257,7 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,resid=1,graph
   
   #reg=c(0,0,alpha)
   # reg <- c(mqo,0)
-  print(reg)
+  # print(reg)
   z <- c()
   # opt.error<- tryCatch(optim(reg, loglik, score,
   #                            method = "BFGS",
@@ -284,7 +279,7 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,resid=1,graph
   }
   
   z$conv <- opt$conv
-  coef <- (opt$par)[1:(k+c+3+m)]
+  coef <- (opt$par)[1:(k+c+4+m)]
   z$coeff <- coef
   z$loglik <- opt$value
   beta <-coef[1:(k+1)] 
@@ -295,10 +290,13 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,resid=1,graph
   z$nu<-nu
   z$rho<-rho
   z$RMC=0
-  lambda0hat<-linkinv(Z%*%as.matrix(nu))
-  lambda1hat<-linkinv(A%*%as.matrix(rho))
+  lambdahat<-linkinv(Z%*%as.matrix(nu))
+  phat<-linkinv(A%*%as.matrix(rho))
+  # print("z$coeff");print(z$coeff)
+  # print("rho");print(rho)
+  # print("phat");print(phat)
   muhat <- linkinv(X%*%as.matrix(beta))
-  z$fitted<-ts(rimk(u=rep(0.5,n),mu=muhat,alpha=alpha,lambda0=lambda0hat,lambda1=lambda1hat),start=start(y),frequency=frequency(y)) 
+  z$fitted<-ts(rimk(u=rep(0.5,n),mu=muhat,alpha=alpha,lambda=lambdahat,p=phat),start=start(y),frequency=frequency(y)) 
   # print(z$fitted)
   # plot(z$fitted,type="l")
   
@@ -332,28 +330,22 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,resid=1,graph
     ########################################################################################################### 
     ####END SECOND DERIVATIVE FROM LOG LIKELIHOOD IN RESPECTO TO MU   
     
-    ####START SECOND DERIVATIVE FROM LOG LIKELIHOOD WITH RESPECT TO LAMBDA0
+    ####START SECOND DERIVATIVE FROM LOG LIKELIHOOD WITH RESPECT TO LAMBDA
     ###########################################################################################################
-    lambda0hatstar.sec<-ifelse(y==0,-1/(lambda0hat^2),NA)
-    lambda0hatstar.sec<-ifelse(y==1,0,lambda0hatstar.sec)
-    lambda0hatstar.sec<-ifelse(y!=0 & y!=1,-1/(lambda0hat+lambda1hat-1)^2,lambda0hatstar.sec)
+    lambdahatstar.sec<-ifelse(y==0,-1/(lambdahat^2),NA)
+    lambdahatstar.sec<-ifelse(y==1,-1/(lambdahat^2),lambdahatstar.sec)
+    lambdahatstar.sec<-ifelse(y!=0 & y!=1,-1/(lambdahat-1)^2,lambdahatstar.sec)
     ########################################################################################################### 
-    ####END SECOND DERIVATIVE FROM LOG LIKELIHOOD WITH RESPECT TO LAMBDA0 
+    ####END SECOND DERIVATIVE FROM LOG LIKELIHOOD WITH RESPECT TO LAMBDA
     
-    ####START SECOND DERIVATIVE FROM LOG LIKELIHOOD WITH RESPECT TO LAMBDA1
+    ####START SECOND DERIVATIVE FROM LOG LIKELIHOOD WITH RESPECT TO p
     ###########################################################################################################
-    lambda1hatstar.sec<-ifelse(y==1,-1/(lambda1hat^2),NA)
-    lambda1hatstar.sec<-ifelse(y==0,0,lambda1hatstar.sec)
-    lambda1hatstar.sec<-ifelse(y!=0 & y!=1,-1/(lambda0hat+lambda1hat-1)^2,lambda1hatstar.sec)
+    phatstar.sec<-ifelse(y==1,-1/(phat^2),NA)
+    phatstar.sec<-ifelse(y==0,-1/(phat-1)^2,phatstar.sec)
+    phatstar.sec<-ifelse(y!=0 & y!=1,0,phatstar.sec)
+    # print("phatstar.sec");print(phatstar.sec)
     ########################################################################################################### 
-    ####END SECOND DERIVATIVE FROM LOG LIKELIHOOD WITH RESPECT TO LAMBDA1 
-    
-    ####START DERIVATIVE FROM [DERIVATIVE FROM LOG LIKELIHOOD IN RESPECT TO LAMBDA1] IN RESPECT TO LAMBDA0
-    ###########################################################################################################
-    lambda0lambda1hat<-ifelse(y==0 | y==1 ,0,-1/(lambda0hat+lambda1hat-1)^2)
-    ###########################################################################################################
-    ####END DERIVATIVE FROM [DERIVATIVE FROM LOG LIKELIHOOD IN RESPECT TO LAMBDA1] IN RESPECT TO LAMBDA0
-    
+    ####END SECOND DERIVATIVE FROM LOG LIKELIHOOD WITH RESPECT TO p 
     
     deta.dbetabeta<- array(0,dim=c((k+1),(k+1),n))
     
@@ -426,7 +418,8 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,resid=1,graph
     den8<-(y^2)*((critical.y-1)^2)
     num9<-2*(muhat-1)*exp(2*alpha)*(y-1)*log(1-tau)
     den9<-muhat*y*(exp(alpha)-e.am)*(e.ay-exp(alpha))*((den.cr)^2)
-    Uaa<-ifelse(y==0,0,num1/den1+num2/den2+num3/den3+num4/den4+num5/den5+num6/den6-num7/den7-num8/den8+num9/den9-1/(alpha^2))
+    Uaa<-ifelse(y==0 | y==1,0,num1/den1+num2/den2+num3/den3+num4/den4+num5/den5+num6/den6-num7/den7-num8/den8+num9/den9-1/(alpha^2))
+    
     # print(Uaa)
     Ualphaalpha<-sum(Uaa)
     ########################################################################################################### 
@@ -437,7 +430,7 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,resid=1,graph
     e.a=exp(alpha)
     numerador<-(e.a*(den.cr*(log(1-tau)*(muhat*(-e.a)*alpha*(y-1)*(e.a-e.am)-y*(muhat*e.a-e.am*(muhat*alpha+muhat-alpha))*(e.a-e.ay)*critical.ly)+(muhat-1)*e.a*alpha*y*(e.a-e.ay))+2*(muhat-1)*e.a*alpha*y*(e.a-e.ay)*log(1-tau)*critical.ly+y*(muhat*e.a-e.am*(muhat*alpha+muhat-alpha))*(-(e.a-e.ay))*((den.cr)^2)))
     denominador<-(muhat^3)*y*((e.a-e.am)^2)*(e.a-e.ay)*((den.cr)^3)
-    Umualpha<-ifelse(y==0,0,numerador/denominador)
+    Umualpha<-ifelse(y==0| y==1,0,numerador/denominador)
     #print(Umualpha)
     ########################################################################################################### 
     ####END DERIVATIVE FROM [DERIVATIVE FROM LOG LIKELIHOOD IN RESPECT TO MU] IN RESPECT TO ALPHA
@@ -446,16 +439,26 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,resid=1,graph
     ###########################################################################################################
     num1<-exp(alpha)*alpha*(den.cr+log(1-tau)*critical.ly)
     den1<-(muhat^2)*(exp(alpha/muhat)-exp(alpha))*((den.cr)^2)
-    mustar<-ifelse(y==0,0,num1/den1)
+    mustar<-ifelse(y==0| y==1,0,num1/den1)
     ########################################################################################################### 
     ####END DERIVATIVE FROM LOG LIKELIHOOD WITH RESPECT TO MU 
     
-    ####START DERIVATIVE FROM LOG LIKELIHOOD WITH RESPECT TO LAMBDA0
+    ####START DERIVATIVE FROM LOG LIKELIHOOD WITH RESPECT TO LAMBDA
     ###########################################################################################################
-    lambda0star<-ifelse(y==0,1/lambda0hat,1/(lambda0hat-1))
+    lambdastar<-ifelse(y==0,1/lambdahat,NA)
+    lambdastar<-ifelse(y==1,1/lambdahat,lambdastar)
+    lambdastar<-ifelse(y!=0 & y!=1,-1/(1-lambdahat),lambdastar)
     ########################################################################################################### 
-    ####END DERIVATIVE FROM LOG LIKELIHOOD WITH RESPECT TO LAMBDA0 
+    ####END DERIVATIVE FROM LOG LIKELIHOOD WITH RESPECT TO LAMBDA 
     
+    ####START DERIVATIVE FROM LOG LIKELIHOOD WITH RESPECT TO p
+    ###########################################################################################################
+    pstar<-ifelse(y==1,1/phat,NA)
+    pstar<-ifelse(y==0,-1/(1-phat),pstar)
+    pstar<-ifelse(y!=0 & y!=1,0,pstar)
+    # print("pstar");print(pstar)
+    ########################################################################################################### 
+    ####END DERIVATIVE FROM LOG LIKELIHOOD WITH RESPECT TO p    
     mT <- diag(as.vector(mu.eta(X%*%as.matrix(beta)))) 
     num.mT2<-dif2link(muhat)
     mT2<-diag(as.vector(-num.mT2*(mu.eta(X%*%as.matrix(beta))^3)))
@@ -463,24 +466,22 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,resid=1,graph
     mV0 <- diag(as.vector(mustar))
     mualpha<-diag(as.vector(Umualpha))
     vI <- matrix(rep(1,n),ncol=1)
-    l0T <- diag(as.vector(mu.eta(Z%*%as.matrix(nu))))
-    num.l0T2<-dif2link(lambda0hat)
-    l0T2<-diag(as.vector(-num.l0T2*(mu.eta(Z%*%as.matrix(nu))^3)))
-    l0V <- diag(as.vector(lambda0hatstar.sec))
-    l0V0 <- diag(as.vector(lambda0star))
-    l1T <- diag(as.vector(mu.eta(A%*%as.matrix(rho))))
-    num.l1T2<-dif2link(lambda1hat)
-    l1T2<-diag(as.vector(-num.l1T2*(mu.eta(A%*%as.matrix(rho))^3)))
-    l1V <- diag(as.vector(lambda1hatstar.sec))
-    l1V0 <- diag(as.vector(lambda1star))
-    l0l1V<- diag(as.vector(lambda0lambda1hat))
-    # print("l0T");print(summary(as.vector(l0T)))
-    # print("num.l0T2");print(summary(as.vector(num.l0T2)))
-    # print("num.l0T2");print(num.l0T2)
-    # 
-    # print("l0T2");print(summary(as.vector(l0T2)))
-    # print("l0V");print(summary(as.vector(l0V)))
-    # print("l0V0");print(summary(as.vector(l0V0)))
+    lT <- diag(as.vector(mu.eta(Z%*%as.matrix(nu))))
+    num.lT2<-dif2link(lambdahat)
+    lT2<-diag(as.vector(-num.lT2*(mu.eta(Z%*%as.matrix(nu))^3)))
+    lV <- diag(as.vector(lambdahatstar.sec))
+    lV0 <- diag(as.vector(lambdastar))
+    pT <- diag(as.vector(mu.eta(A%*%as.matrix(rho))))
+    num.pT2<-dif2link(phat)
+    pT2<-diag(as.vector(-num.pT2*(mu.eta(A%*%as.matrix(rho))^3)))
+    pV <- diag(as.vector(phatstar.sec))
+    pV0 <- diag(as.vector(pstar))
+    
+    # print("pT");print(summary(as.vector(pT)))
+    # print("num.pT2");print(summary(as.vector(num.pT2)))
+    # print("pT2");print(summary(as.vector(pT2)))
+    # print("pV");print(summary(as.vector(pV)))
+    # print("pV0");print(summary(as.vector(pV0)))
     KBB=matrix(rep(NA,(k+1)*(k+1)),ncol=(k+1))
     if(length(KBB)==1){
       KBB <- -(t(X)%*%mV%*%(mT^2)%*%X + t(X)%*%mV0%*%mT2%*%X + t(vI)%*%mV0%*%mT%*%deta.dbetabeta)
@@ -503,35 +504,26 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,resid=1,graph
     Knualpha<-t(Kalphanu)
     Knunu<-matrix(rep(NA,(c+1)*(c+1)),ncol=(c+1))
     if(length(Knunu)==1){
-      Knunu <- -(t(Z)%*%l0V%*%(l0T^2)%*%Z + t(Z)%*%l0V0%*%l0T2%*%Z + t(vI)%*%l0V0%*%l0T%*%deta.dnunu)
+      Knunu <- -(t(Z)%*%lV%*%(lT^2)%*%Z + t(Z)%*%lV0%*%lT2%*%Z + t(vI)%*%lV0%*%lT%*%deta.dnunu)
     }else{
       for(j in 1:(c+1)){
         for(i in 1:(c+1)){
-          Knunu[i,j] <- -(t(as.vector(Z[,i]))%*%l0V%*%(l0T^2)%*%as.vector(Z[,j]) + t(as.vector(Z[,i]))%*%l0V0%*%l0T2%*%as.vector(Z[,j]) + t(vI)%*%l0V0%*%l0T%*%as.matrix(deta.dnunu[i,j,]))
+          Knunu[i,j] <- -(t(as.vector(Z[,i]))%*%lV%*%(lT^2)%*%as.vector(Z[,j]) + t(as.vector(Z[,i]))%*%lV0%*%lT2%*%as.vector(Z[,j]) + t(vI)%*%lV0%*%lT%*%as.matrix(deta.dnunu[i,j,]))
         }
       }
     }
-    Knurho<-matrix(rep(NA,(c+1)*(m+1)),ncol=(m+1))
-    if(length(Knurho)==1){
-      Knurho <- -(t(Z)%*%l0l1V%*%l0T%*%l1T%*%A)
-    }else{
-      for(j in 1:(m+1)){
-        for(i in 1:(c+1)){
-          Knurho[i,j] <- -(t(as.vector(Z[,i]))%*%l0l1V%*%l0T%*%l1T%*%as.vector(A[,j]))
-        }
-      }
-    }
+    Knurho<-matrix(rep(0,(c+1)*(m+1)),ncol=(m+1))
     
     KrhoB<-t(KBrho)
     Krhoalpha<-t(Kalpharho)
     Krhonu<-t(Knurho)
     Krhorho<-matrix(rep(NA,(m+1)*(m+1)),ncol=(m+1))
     if(length(Krhorho)==1){
-      Krhorho <- -(t(A)%*%l1V%*%(l1T^2)%*%A + t(A)%*%l1V0%*%l0T2%*%A + t(vI)%*%l1V0%*%l1T%*%deta.drhorho)
+      Krhorho <- -(t(A)%*%pV%*%(pT^2)%*%A + t(A)%*%pV0%*%pT2%*%A + t(vI)%*%pV0%*%pT%*%deta.drhorho)
     }else{
       for(j in 1:(m+1)){
         for(i in 1:(m+1)){
-          Krhorho[i,j] <- -(t(as.vector(A[,i]))%*%l1V%*%(l1T^2)%*%as.vector(A[,j]) + t(as.vector(A[,i]))%*%l1V0%*%l1T2%*%as.vector(A[,j]) + t(vI)%*%l1V0%*%l1T%*%as.matrix(deta.drhorho[i,j,]))
+          Krhorho[i,j] <- -(t(as.vector(A[,i]))%*%pV%*%(pT^2)%*%as.vector(A[,j]) + t(as.vector(A[,i]))%*%pV0%*%pT2%*%as.vector(A[,j]) + t(vI)%*%pV0%*%pT%*%as.matrix(deta.drhorho[i,j,]))
         }
       }
     }
@@ -547,7 +539,7 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,resid=1,graph
     return(K)
   }
   K<-obs.inf(y,muhat)
-  
+  print(K)
   Ksolve<- tryCatch(solve(K), error = function(e) return("error"))
   if(Ksolve[1] == "error")
   {z$RMC=1#used at Monte-Carlo simulation for discard from the sample
@@ -643,7 +635,7 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,resid=1,graph
   den.cr=log(1-exp(critical))
   den.cr[is.nan(den.cr)]<--36.04365
   
-  z$resid1 <- as.vector(qnorm(pmk(y,alpha, log(1-tau)/den.cr,lambda0=lambda0hat,lambda1=lambda1hat,log.p = FALSE ) ))
+  z$resid1 <- as.vector(qnorm(pmk(y,alpha, log(1-tau)/den.cr,lambda=lambdahat,p=phat,log.p = FALSE ) ))
   # print(z$resid1)
   mresult<-matrix(round(c(z$loglik,z$aic,z$bic),4),nrow=3,ncol=1)
   rownames(mresult)<-c("Log-likelihood","AIC","BIC")
@@ -976,8 +968,8 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,resid=1,graph
     alpha <- z[2]
     nu<-z[3]
     rho<-z[4]
-    lambda0<-linkinv(Z[,1]*nu)
-    lambda1<-linkinv(A[,1]*rho)
+    lambda<-linkinv(Z[,1]*nu)
+    p<-linkinv(A[,1]*rho)
     mu <- linkinv(X[,1]*beta)
     mu[is.na(mu)]<-.Machine$double.eps
     mu[mu<.Machine$double.eps]<-.Machine$double.eps
@@ -993,13 +985,13 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,resid=1,graph
     critical.ly<-log(1-critical.y)
     critical.ly[is.nan(critical.ly)]<--36.04365
     critical.ly[critical.ly< (-36.04365)]<--36.04365#para exp dar .Machine$double.eps
-    l=ifelse(y==0,log(lambda0),NA)
-    l=ifelse(y==1,log(lambda1),l)
-    l=ifelse(y!=0 & y!=1,log(1-lambda0-lambda1)+log(alpha)+alpha-alpha/y+(log(1-tau)/den.cr -1)*critical.ly-2*log(y)+log(log(1-tau)/den.cr),l)
+    l=ifelse(y==0,log(lambda)+log(1-p),NA)
+    l=ifelse(y==1,log(lambda)+log(p),l)
+    l=ifelse(y!=0 & y!=1,log(1-lambda)+log(alpha)+alpha-alpha/y+(log(1-tau)/den.cr -1)*critical.ly-2*log(y)+log(log(1-tau)/den.cr),l)
     return(sum(l))
   }
   
-  ini_null<- c(mean(z$fitted),reg[k+2],length(y[y==0])/n,length(y[y==1])/n)
+  ini_null<- c(linkfun(mean(y[y!=0&y!=1])),reg[k+2],length(y[y==0|y==1])/n,length(y[y==1])/length(y[y==0|y==1]))
   # print(ini_null)
   opti.error<- tryCatch(optim(ini_null, loglik_null,method = "BFGS", control = list(fnscale = -1)), error = function(e) return("error"))
   if(opti.error[1] == "error")

@@ -719,7 +719,7 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,tau=0.5,resid=1,graph=T,print=T,ch
     return(sum(l))
   }
   
-  ini_null<- c(mean(z$fitted),reg[k+2],length(y[y==0])/n)
+  ini_null<- c(linkfun(mean(y[y!=0])),reg[k+2],length(y[y==0])/n)
   # print(ini_null)
   opti.error<- tryCatch(optim(ini_null, loglik_null,method = "BFGS", control = list(fnscale = -1)), error = function(e) return("error"))
   if(opti.error[1] == "error")
