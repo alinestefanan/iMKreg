@@ -4,13 +4,12 @@
 # tau: quantil, when set 0.5 is the median
 # link: "logit", "probit" or "cloglog"
 
-imkreg0Z1A <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,graph=T,print=T,check=F,link="logit")
+imkreg01A <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,graph=T,print=T,check=F,link="logit")
 {
   n <- length(y) 
   
-  exvar.nu=as.matrix(exvar.nu)
-  c=if(is.matrix(exvar.nu)){ncol(exvar.nu)}else{1}
-  Z<-matrix(c(rep(1,n),exvar.nu), nrow=n, ncol=(c+1), byrow=F)
+  c<-0
+  Z<-matrix(rep(1,n), nrow=n, ncol=(1), byrow=F)
   
   exvar.rho=as.matrix(exvar.rho)
   m=if(is.matrix(exvar.rho)){ncol(exvar.rho)}else{1}
@@ -540,7 +539,7 @@ imkreg0Z1A <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,graph=T,
     return(K)
   }
   K<-obs.inf(y,muhat)
-  #print(K)
+ # print(K)
   Ksolve<- tryCatch(solve(K), error = function(e) return("error"))
   if(Ksolve[1] == "error")
   {z$RMC=1#used at Monte-Carlo simulation for discard from the sample
@@ -627,7 +626,7 @@ imkreg0Z1A <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,graph=T,
   ###########################
   
   z$serie <- y
-
+  
   muhat[is.na(muhat)]<-.Machine$double.eps
   muhat[muhat<.Machine$double.eps]<-.Machine$double.eps
   muhat[muhat>0.9999999]<-0.9999999
@@ -735,77 +734,7 @@ imkreg0Z1A <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,graph=T,
       }
       dev.off()
     }
-    pdf("cor_y_covZ.pdf",width=5, height=4)
-    {
-      if (c<=3){
-        par(mfrow=c(1,c))
-        par(mar=c(2.8, 2.7, 1, 1))
-        par(mgp=c(1.7, 0.45, 0))}
-      # for (i in k){
-      # plot(as.vector(X[,1+i]),as.vector(y),main=" ",xlab=paste("Cov ",i),ylab="y")
-      # }
-      if(c==1){
-        plot(as.vector(Z[,2]),as.vector(y),main=" ",xlab=paste("Cov Z1"),ylab="y")#,legend("topleft",paste("cor=",cor(X[,2],y))))#,#pch=vpch,
-        text(x = median(as.vector(Z[,2])), y = median(as.vector(y)), label = paste("cor=",round(cor(Z[,2],y),4)), cex = 1)
-      }
-      if (c==2){
-        plot(as.vector(Z[,2]),as.vector(y),main=" ",xlab=paste("Cov Z1"),ylab="y")#,legend("topleft",paste("cor=",cor(X[,2],y))))
-        text(x = median(as.vector(Z[,2])), y = median(as.vector(y)), label = paste("cor=",round(cor(Z[,2],y),4)), cex = 1)
-        
-        plot(as.vector(Z[,3]),as.vector(y),main=" ",xlab=paste("Cov Z2"),ylab="y")
-        text(x = median(as.vector(Z[,3])), y = median(as.vector(y)), label = paste("cor=",round(cor(Z[,3],y),4)), cex = 1)
-      }
-      if (c==3){
-        plot(as.vector(Z[,2]),as.vector(y),main=" ",xlab=paste("Cov Z1"),ylab="y")#,legend("topleft",paste("cor=",cor(X[,2],y)),pt.bg="white", lty=c(1,2), bty="n"))
-        text(x = median(as.vector(Z[,2])), y = median(as.vector(y)), label = paste("cor=",round(cor(Z[,2],y),4)), cex = 1)
-        
-        plot(as.vector(Z[,3]),as.vector(y),main=" ",xlab=paste("Cov Z2"),ylab="y")
-        text(x = median(as.vector(Z[,3])), y = median(as.vector(y)), label = paste("cor=",round(cor(Z[,3],y),4)), cex = 1)
-        
-        plot(as.vector(Z[,4]),as.vector(y),main=" ",xlab=paste("Cov Z3"),ylab="y")
-        text(x = median(as.vector(Z[,4])), y = median(as.vector(y)), label = paste("cor=",round(cor(Z[,4],y),4)), cex = 1)
-      }
-    }
-    dev.off()
-    if(c>1){
-      pdf("cor_covZ_covZ.pdf",width=5, height=4)
-      {
-        if (c==2){
-          par(mfrow=c(1,1))
-          par(mar=c(2.8, 2.7, 1, 1))
-          par(mgp=c(1.7, 0.45, 0))
-          
-          plot(as.vector(Z[,3]),as.vector(Z[,2]),main=" ",xlab=paste("Cov Z2"),ylab="Cov Z1")
-          text(x = median(as.vector(Z[,3])), y = median(as.vector(Z[,2])), label = paste("cor=",round(cor(Z[,3],Z[,2]),4)), cex = 1)
-        }
-        if (c==3){
-          par(mfrow=c(1,3))
-          par(mar=c(2.8, 2.7, 1, 1))
-          par(mgp=c(1.7, 0.45, 0))
-          
-          plot(as.vector(Z[,3]),as.vector(Z[,2]),main=" ",xlab=paste("Cov Z2"),ylab="Cov Z1")
-          text(x = median(as.vector(Z[,3])), y = median(as.vector(Z[,2])), label = paste("cor=",round(cor(Z[,3],Z[,2]),4)), cex = 1)
-          
-          plot(as.vector(Z[,4]),as.vector(Z[,2]),main=" ",xlab=paste("Cov Z3"),ylab="Cov Z1")
-          text(x = median(as.vector(Z[,4])), y = median(as.vector(Z[,2])), label = paste("cor=",round(cor(Z[,4],Z[,2]),4)), cex = 1)
-          
-          plot(as.vector(Z[,4]),as.vector(Z[,3]),main=" ",xlab=paste("Cov Z3"),ylab="Cov Z2")
-          text(x = median(as.vector(Z[,4])), y = median(as.vector(Z[,3])), label = paste("cor=",round(cor(Z[,4],Z[,3]),4)), cex = 1)
-          
-        }
-      }
-      dev.off()
-      
-      pdf("cor_matrix_covZ.pdf",width=5, height=4)
-      {
-        par(mfrow=c(1,1))
-        par(mar=c(2.8, 2.7, 1, 1))
-        par(mgp=c(1.7, 0.45, 0))
-        library(corrplot)
-        corrplot(cor(exvar.nu),method='number')              # visualize the multicollinearity
-      }
-      dev.off()
-    }
+
     pdf("cor_y_covA.pdf",width=5, height=4)
     {
       if (m<=3){
@@ -1075,8 +1004,7 @@ imkreg0Z1A <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,graph=T,
   z$p_durbin<-durbin$p.value
   #null hypothesis: non-multicollinearity
   z$cor.beta <- cor(exvar.beta)                                         # independent variables correlation matrix 
-  z$cor.nu <- cor(exvar.nu)
-  z$cor.rho <- cor(exvar.rho)
+  
   #null hypothesis: non-heteroscedasticity (constant variance)
    SBP<-function(resi){#adapted to fits a linear regression model to the residuals of the mkreg model 
     sigma2 <- sum(resi^2)/length(resi)
@@ -1126,7 +1054,6 @@ imkreg0Z1A <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,graph=T,
     message("")
     print(z$accuracyfitted)
     message("")
-    
   }
   
   if(check==TRUE){

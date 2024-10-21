@@ -5,10 +5,10 @@
 # resid: 1 = quantile residual, 2 = deviance residual
 # link: "logit", "probit" or "cloglog"
 
-mkreg.env <- function(y,exvar=NA,tau=0.5,resid=1,graph=T,print=T,check=F,link="logit")
+mkreg.env <- function(y,exvar.beta=NA,tau=0.5,resid=1,graph=T,print=T,check=F,link="logit")
 {
   n <- length(y) 
-  exvar=as.matrix(exvar)
+  exvar=as.matrix(exvar.beta)
   k=if(is.matrix(exvar)){ncol(exvar)}else{1}
   X <- matrix(c(rep(1,n),exvar), nrow=n, ncol=(k+1), byrow=F)
   ##funções de ligação

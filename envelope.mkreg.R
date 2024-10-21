@@ -1,15 +1,15 @@
-envelope.mkreg<-function(residual,n,beta,exvar,alpha,tau,link="logit",conf=0.95)
+envelope.mkreg<-function(residual,n,beta,exvar.beta,alpha,tau,link="logit",conf=0.95)
 {
   source("sample.mkreg.R")
   source("mkreg-env.R")
   smk<-sr<-matrix(NA,nrow=n,ncol=100)
   for (i in 1:100){
-    smk[,i]<-sample.mkreg(n,beta=beta,exvar=exvar,alpha=alpha,tau=tau,link=link)
-    mkr<-mkreg.env(smk[,i],exvar=exvar,tau=tau,resid=1,graph=F,check=F,print=F,link=link)
+    smk[,i]<-sample.mkreg(n,beta=beta,exvar.beta=exvar.beta,alpha=alpha,tau=tau,link=link)
+    mkr<-mkreg.env(smk[,i],exvar.beta=exvar.beta,tau=tau,resid=1,graph=F,check=F,print=F,link=link)
     if(mkr$RMC==0){
       sr[,i]<-sort(mkr$residual)}else{
-        while(mkr$RMC==1){smk[,i]<-sample.mkreg(n,beta=beta,exvar=exvar,alpha=alpha,tau=tau,link=link)
-        mkr<-mkreg.env(smk[,i],exvar=exvar,tau=tau,resid=1,graph=F,check=F,print=F,link=link)}
+        while(mkr$RMC==1){smk[,i]<-sample.mkreg(n,beta=beta,exvar.beta=exvar.beta,alpha=alpha,tau=tau,link=link)
+        mkr<-mkreg.env(smk[,i],exvar.beta=exvar.beta,tau=tau,resid=1,graph=F,check=F,print=F,link=link)}
         sr[,i]<-sort(mkr$residual)
       }
   }

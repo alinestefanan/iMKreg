@@ -2,10 +2,9 @@
 # S: seasonal periodicity
 # exvar.beta,exvar.nu: covariate column matrix
 # tau: quantil, when set 0.5 is the median
-# resid: 1 = quantile residual, 2 = deviance residual
 # link: "logit", "probit" or "cloglog"
 
-mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,tau=0.5,resid=1,graph=T,print=T,check=F,link="logit")
+imkreg0Z <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,graph=T,print=T,check=F,link="logit")
 {
   n <- length(y) 
   
@@ -81,7 +80,8 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,tau=0.5,resid=1,graph=T,print=T,ch
   })
   
   dmk_alpha<-function(alpha){
-    beta=log(1-tau)/log(1-exp(alpha-alpha/median(y)))
+    y1<-y[which(y!=0 & y!=1)]
+    beta=log(1-tau)/log(1-exp(alpha-alpha/median(y1)))
     if (is.na(beta)){beta=.Machine$double.eps}
     if(beta<.Machine$double.eps) beta<-.Machine$double.eps
     if (is.infinite(beta)){beta=.Machine$double.xmax}
@@ -465,7 +465,7 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,tau=0.5,resid=1,graph=T,print=T,ch
   z$pvalues<-(1-pnorm(abs(z$zstat)))*2
   first_col<-c(0:k,"alpha",0:c)
   result <- matrix(c(first_col,round(c(z$coeff,z$zstat,LI,LS,z$pvalues),4),resp), nrow=length(z$coeff), ncol=7, byrow=F)
-  colnames(result) <- c("Estimator","MLE","Wald's Statistic","Lower bound","Upper bound","p-value","Wald'S Test result")
+  colnames(result) <- c("Parameter","MLE","Wald's Statistic","Lower bound","Upper bound","p-value","Wald'S Test result")
   rownames(result)<-c(rep("beta",(k+1)),"",rep("nu",(c+1)))
   z$coef.result<-result
   z$aic <- -2*(z$loglik)+2*(length(opt$par)) 
@@ -517,7 +517,7 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,tau=0.5,resid=1,graph=T,print=T,ch
   ###########################
   
   z$serie <- y
-  #quantile residuals
+
   muhat[is.na(muhat)]<-.Machine$double.eps
   muhat[muhat<.Machine$double.eps]<-.Machine$double.eps
   muhat[muhat>0.9999999]<-0.9999999
@@ -528,18 +528,22 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,tau=0.5,resid=1,graph=T,print=T,ch
   den.cr=log(1-exp(critical))
   den.cr[is.nan(den.cr)]<--36.04365
   
-  z$resid1 <- as.vector(qnorm(pmk(y,alpha, log(1-tau)/den.cr,lambda0=lambda0hat,log.p = FALSE ) ))
-  # print(z$resid1)
+  ########################################################################
+  ######## randomized quantile residuals with uniform distribution  ######
+  ########################################################################
+  
+  ui<-rep(NA,n)
+  for(i in 1:n)
+  {
+    if(y[i]==0) ui[i] <- runif(1,0,lambda0hat[i])
+    if(y[i]!=0) ui[i] <- pmk(y[i],alpha=z$alpha,beta=log(1-tau)/den.cr[i], lambda0=lambda0hat[i],log.p = FALSE)
+  }
+  z$residual <- residual <- qnorm(ui)
+  
   mresult<-matrix(round(c(z$loglik,z$aic,z$bic),4),nrow=3,ncol=1)
   rownames(mresult)<-c("Log-likelihood","AIC","BIC")
   colnames(mresult)<-c("")
   z$mresult<-mresult
-  
-  if(resid==1) {
-    residual <- z$resid1
-  }
-  
-  z$residual<-residual
   
   ###################################################
   ######### GRAPHICS ################################
@@ -836,7 +840,6 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,tau=0.5,resid=1,graph=T,print=T,ch
   z$ljungbox<-ljungbox$statistic
   z$p_ljungbox<-ljungbox$p.value
   
-  
   dw<-function(res){
     alternative = "two.sided"
     dw <- sum(diff(res)^2)/sum(res^2)
@@ -844,21 +847,18 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,tau=0.5,resid=1,graph=T,print=T,ch
     if (n<100) {
       A <- diag(c(1, rep(2, n - 2), 1))
       A[abs(row(A) - col(A)) == 1] <- -1
-      MA <- diag(rep(1, n)) - X %*% Q1 %*% t(exvar.beta)
+      MA <- diag(rep(1, n)) - exvar.beta %*% Q1 %*% t(exvar.beta)
       MA <- MA %*% A
       ev <- eigen(MA)$values[1:(n - k)]
-      if (any(Im(ev) > tol)) 
+      if (any(Im(ev) > 1e-10)) 
         warning("imaginary parts of eigenvalues discarded")
       ev <- Re(ev)
-      ev <- ev[ev > tol]
-      pdw <- function(dw) .Fortran("pan", as.double(c(dw, 
-                                                      ev)), as.integer(length(ev)), as.double(0), 
-                                   as.integer(iterations), x = double(1), PACKAGE = "lmtest")$x
-      pval <- switch(alternative, two.sided = (2 * min(pdw(dw), 
-                                                       1 - pdw(dw))), less = (1 - pdw(dw)), greater = pdw(dw))
+      ev <- ev[ev > 1e-10]
+      pdw <- function(dw) .Fortran("pan", as.double(c(dw, ev)), as.integer(length(ev)), as.double(0), 
+                                   as.integer(15), x = double(1), PACKAGE = "lmtest")$x
+      pval <- switch(alternative, two.sided = (2 * min(pdw(dw), 1 - pdw(dw))), less = (1 - pdw(dw)), greater = pdw(dw))
       if (is.na(pval) || ((pval > 1) | (pval < 0))) {
         warning("exact p value cannot be computed (not in [0,1]), approximate p value will be used")
-        exact <- FALSE
       }
     }else{
       if (n < max(5, k)) {
@@ -866,26 +866,18 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,tau=0.5,resid=1,graph=T,print=T,ch
         pval <- 1
       }
       else {
-        AX <- matrix(as.vector(filter(exvar.beta, c(-1, 2, -1))), 
-                     ncol = k)
+        AX <- matrix(as.vector(filter(exvar.beta, c(-1, 2, -1))), ncol = k)
         AX[1, ] <- exvar.beta[1, ] - exvar.beta[2, ]
         AX[n, ] <- exvar.beta[n, ] - exvar.beta[(n - 1), ]
         XAXQ <- t(exvar.beta) %*% AX %*% Q1
         P <- 2 * (n - 1) - sum(diag(XAXQ))
-        Q <- 2 * (3 * n - 4) - 2 * sum(diag(crossprod(AX) %*% 
-                                              Q1)) + sum(diag(XAXQ %*% XAXQ))
+        Q <- 2 * (3 * n - 4) - 2 * sum(diag(crossprod(AX) %*% Q1)) + sum(diag(XAXQ %*% XAXQ))
         dmean <- P/(n - k)
-        dvar <- 2/((n - k) * (n - k + 2)) * (Q - P * 
-                                               dmean)
-        pval <- switch(alternative, two.sided = (2 * 
-                                                   pnorm(abs(dw - dmean), sd = sqrt(dvar), lower.tail = FALSE)), 
-                       less = pnorm(dw, mean = dmean, sd = sqrt(dvar), 
-                                    lower.tail = FALSE), greater = pnorm(dw, 
-                                                                         mean = dmean, sd = sqrt(dvar)))
+        dvar <- 2/((n - k) * (n - k + 2)) * (Q - P * dmean)
+        pval <- switch(alternative, two.sided = (2 * pnorm(abs(dw - dmean), sd = sqrt(dvar), lower.tail = FALSE)), less = pnorm(dw, mean = dmean, sd = sqrt(dvar), lower.tail = FALSE), greater = pnorm(dw, mean = dmean, sd = sqrt(dvar)))
       }
     }
-    alternative <- switch(alternative, two.sided = "true autocorrelation is not 0", 
-                          less = "true autocorrelation is less than 0", greater = "true autocorrelation is greater than 0")
+    alternative <- switch(alternative, two.sided = "true autocorrelation is not 0", less = "true autocorrelation is less than 0", greater = "true autocorrelation is greater than 0")
     names(dw) <- "DW"
     RVAL <- list(statistic = dw, method = "Durbin-Watson test", 
                  alternative = alternative, p.value = pval)
@@ -940,20 +932,13 @@ mkreg <- function(y,exvar.beta=NA,exvar.nu=NA,tau=0.5,resid=1,graph=T,print=T,ch
     print(c("aic =",round(z$aic,4),"bic =",round(z$bic,4)),quote=F)
     print(c("R-squared=",round(z$r2,4)),quote=F)
     message("")  
-    if(resid==1) {
-      print("Quantile residuals:",quote=F)
-    }
-    
-    if(resid==2) {
-      print("Deviance residuals:",quote=F)
-    }
+    print("Randomized quantile residuals:",quote=F)
     print(summary(z$residual))
     message("")
     print(z$diagnostic)
     message("")
     print(z$accuracyfitted)
     message("")
-    
   }
   
   if(check==TRUE){

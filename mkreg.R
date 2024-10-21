@@ -1,16 +1,16 @@
 # y: time series
 # S: seasonal periodicity
-# exvar: covariate column matrix
+# exvar.beta: covariate column matrix
 # tau: quantil, when set 0.5 is the median
 # resid: 1 = quantile residual, 2 = deviance residual
 # link: "logit", "probit" or "cloglog"
 
-mkreg <- function(y,exvar=NA,tau=0.5,resid=1,graph=T,print=T,check=F,link="logit")
+mkreg01 <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,resid=1,graph=T,print=T,check=F,link="logit")
 {
   n <- length(y) 
-  exvar=as.matrix(exvar)
-  k=if(is.matrix(exvar)){ncol(exvar)}else{1}
-  X <- matrix(c(rep(1,n),exvar), nrow=n, ncol=(k+1), byrow=F)
+  exvar.beta=as.matrix(exvar.beta)
+  k=if(is.matrix(exvar.beta)){ncol(exvar.beta)}else{1}
+  X <- matrix(c(rep(1,n),exvar.beta), nrow=n, ncol=(k+1), byrow=F)
   ##funções de ligação
   linktemp <- substitute(link)
   if (!is.character(linktemp))
@@ -360,10 +360,12 @@ mkreg <- function(y,exvar=NA,tau=0.5,resid=1,graph=T,print=T,check=F,link="logit
   }
   LI<-z$coeff-qnorm(0.975)*sqrt(v)
   LS<-z$coeff+qnorm(0.975)*sqrt(v)
+  z$LI<-LI
+  z$LS<-LS
   z$pvalues<-(1-pnorm(abs(z$zstat)))*2
   first_col<-c(0:k,"alpha")
   result <- matrix(c(first_col,round(c(z$coeff,z$zstat,LI,LS,z$pvalues),4),resp), nrow=length(z$coeff), ncol=7, byrow=F)
-  colnames(result) <- c("Estimator","MLE","Wald's Statistic","Lower bound","Upper bound","p-value","Wald'S Test result")
+  colnames(result) <- c("Parameter","MLE","Wald's Statistic","Lower bound","Upper bound","p-value","Wald'S Test result")
   rownames(result)<-c(rep("beta",(k+1)),"")
   z$coef.result<-result
   z$aic <- -2*(z$loglik)+2*(length(opt$par)) 
@@ -532,7 +534,7 @@ mkreg <- function(y,exvar=NA,tau=0.5,resid=1,graph=T,print=T,check=F,link="logit
         par(mar=c(2.8, 2.7, 1, 1))
         par(mgp=c(1.7, 0.45, 0))
         library(corrplot)
-        corrplot(cor(exvar),method='number')              # visualize the multicollinearity
+        corrplot(cor(exvar.beta),method='number')              # visualize the multicollinearity
       }
       dev.off()
     }
@@ -602,16 +604,16 @@ mkreg <- function(y,exvar=NA,tau=0.5,resid=1,graph=T,print=T,check=F,link="logit
       lines(c(-10,10),c(-10,10),lty=2)
     }
     dev.off()
-    pdf("envelope_plot.pdf",width=5, height=4)
-    { 
-      par(mfrow=c(1,1))
-      par(mar=c(2.8, 2.7, 1, 1)) 
-      par(mgp=c(1.7, 0.45, 0))
-      source("envelope.mkreg.R")
-      envelope.mkreg(residual=z$residual,n=n,beta=beta,exvar=exvar,alpha=alpha,tau=tau,link="logit")
-      #fazer 1000 réplicas, ordenar e calcular bandas de confiança
-    }
-    dev.off()
+    # pdf("envelope_plot.pdf",width=5, height=4)
+    # { 
+    #   par(mfrow=c(1,1))
+    #   par(mar=c(2.8, 2.7, 1, 1)) 
+    #   par(mgp=c(1.7, 0.45, 0))
+    #   source("envelope.mkreg.R")
+    #   envelope.mkreg(residual=z$residual,n=n,beta=beta,exvar.beta=exvar.beta,alpha=alpha,tau=tau,link="logit")
+    #   #fazer 1000 réplicas, ordenar e calcular bandas de confiança
+    # }
+    # dev.off()
     pdf("adjusted.pdf",width=5, height=4)
     {
       par(mfrow=c(1,1))
@@ -672,39 +674,40 @@ mkreg <- function(y,exvar=NA,tau=0.5,resid=1,graph=T,print=T,check=F,link="logit
   z$andersondarling<-andersondarling$statistic
   z$p_andersondarling<-andersondarling$p.value
   
+  if(length(residual)<=5000){
   shapiro=shapiro.test(residual)
   z$shapiro=shapiro$statistic
   z$p_shapiro=shapiro$p.value
-  # print(z$p_andersondarling)
+  }else{
+    shapiro=shapiro.test(residual[1:5000])
+    z$shapiro=shapiro$statistic
+    z$p_shapiro=shapiro$p.value
+  }
   
   #non autocorrelated
   ljungbox<- Box.test(residual, lag = 10, type = "Ljung-Box", fitdf = k)
   z$ljungbox<-ljungbox$statistic
   z$p_ljungbox<-ljungbox$p.value
   
-  
   dw<-function(res){
     alternative = "two.sided"
     dw <- sum(diff(res)^2)/sum(res^2)
-    Q1 <- chol2inv(qr.R(qr(exvar)))
+    Q1 <- chol2inv(qr.R(qr(exvar.beta)))
     if (n<100) {
       A <- diag(c(1, rep(2, n - 2), 1))
       A[abs(row(A) - col(A)) == 1] <- -1
-      MA <- diag(rep(1, n)) - X %*% Q1 %*% t(exvar)
+      MA <- diag(rep(1, n)) - exvar.beta %*% Q1 %*% t(exvar.beta)
       MA <- MA %*% A
       ev <- eigen(MA)$values[1:(n - k)]
-      if (any(Im(ev) > tol)) 
+      if (any(Im(ev) > 1e-10)) 
         warning("imaginary parts of eigenvalues discarded")
       ev <- Re(ev)
-      ev <- ev[ev > tol]
-      pdw <- function(dw) .Fortran("pan", as.double(c(dw, 
-                                                      ev)), as.integer(length(ev)), as.double(0), 
-                                   as.integer(iterations), x = double(1), PACKAGE = "lmtest")$x
-      pval <- switch(alternative, two.sided = (2 * min(pdw(dw), 
-                                                       1 - pdw(dw))), less = (1 - pdw(dw)), greater = pdw(dw))
+      ev <- ev[ev > 1e-10]
+      pdw <- function(dw) .Fortran("pan", as.double(c(dw, ev)), as.integer(length(ev)), as.double(0), 
+                                   as.integer(15), x = double(1), PACKAGE = "lmtest")$x
+      pval <- switch(alternative, two.sided = (2 * min(pdw(dw), 1 - pdw(dw))), less = (1 - pdw(dw)), greater = pdw(dw))
       if (is.na(pval) || ((pval > 1) | (pval < 0))) {
         warning("exact p value cannot be computed (not in [0,1]), approximate p value will be used")
-        exact <- FALSE
       }
     }else{
       if (n < max(5, k)) {
@@ -712,26 +715,18 @@ mkreg <- function(y,exvar=NA,tau=0.5,resid=1,graph=T,print=T,check=F,link="logit
         pval <- 1
       }
       else {
-        AX <- matrix(as.vector(filter(exvar, c(-1, 2, -1))), 
-                     ncol = k)
-        AX[1, ] <- exvar[1, ] - exvar[2, ]
-        AX[n, ] <- exvar[n, ] - exvar[(n - 1), ]
-        XAXQ <- t(exvar) %*% AX %*% Q1
+        AX <- matrix(as.vector(filter(exvar.beta, c(-1, 2, -1))), ncol = k)
+        AX[1, ] <- exvar.beta[1, ] - exvar.beta[2, ]
+        AX[n, ] <- exvar.beta[n, ] - exvar.beta[(n - 1), ]
+        XAXQ <- t(exvar.beta) %*% AX %*% Q1
         P <- 2 * (n - 1) - sum(diag(XAXQ))
-        Q <- 2 * (3 * n - 4) - 2 * sum(diag(crossprod(AX) %*% 
-                                              Q1)) + sum(diag(XAXQ %*% XAXQ))
+        Q <- 2 * (3 * n - 4) - 2 * sum(diag(crossprod(AX) %*% Q1)) + sum(diag(XAXQ %*% XAXQ))
         dmean <- P/(n - k)
-        dvar <- 2/((n - k) * (n - k + 2)) * (Q - P * 
-                                               dmean)
-        pval <- switch(alternative, two.sided = (2 * 
-                                                   pnorm(abs(dw - dmean), sd = sqrt(dvar), lower.tail = FALSE)), 
-                       less = pnorm(dw, mean = dmean, sd = sqrt(dvar), 
-                                    lower.tail = FALSE), greater = pnorm(dw, 
-                                                                         mean = dmean, sd = sqrt(dvar)))
+        dvar <- 2/((n - k) * (n - k + 2)) * (Q - P * dmean)
+        pval <- switch(alternative, two.sided = (2 * pnorm(abs(dw - dmean), sd = sqrt(dvar), lower.tail = FALSE)), less = pnorm(dw, mean = dmean, sd = sqrt(dvar), lower.tail = FALSE), greater = pnorm(dw, mean = dmean, sd = sqrt(dvar)))
       }
     }
-    alternative <- switch(alternative, two.sided = "true autocorrelation is not 0", 
-                          less = "true autocorrelation is less than 0", greater = "true autocorrelation is greater than 0")
+    alternative <- switch(alternative, two.sided = "true autocorrelation is not 0", less = "true autocorrelation is less than 0", greater = "true autocorrelation is greater than 0")
     names(dw) <- "DW"
     RVAL <- list(statistic = dw, method = "Durbin-Watson test", 
                  alternative = alternative, p.value = pval)
@@ -744,13 +739,13 @@ mkreg <- function(y,exvar=NA,tau=0.5,resid=1,graph=T,print=T,check=F,link="logit
 
   
   #  non-multicollinearity test can be checked by
-  z$var <- cor(exvar)                                         # independent variables correlation matrix 
+  z$var <- cor(exvar.beta)                                         # independent variables correlation matrix 
   
   #null hypothesis: non-heteroscedasticity (constant variance)
    SBP<-function(resi){#adapted to fits a linear regression model to the residuals of the mkreg model 
     sigma2 <- sum(resi^2)/n
     w <- resi^2 - sigma2
-    aux <- lm.fit(exvar, w)
+    aux <- lm.fit(exvar.beta, w)
     bp <- n * sum(aux$fitted.values^2)/sum(w^2)
     method <- "studentized Breusch-Pagan test"
     names(bp) <- "BP"
