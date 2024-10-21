@@ -1,12 +1,12 @@
 # tau: quantil, when set 0.5 is the median
 # link: "logit", "probit" or "cloglog"
 
-sample.mkreg <- function(n,beta=c(0.0),exvar=NA,alpha=10,tau=0.5,link="logit")
+sample.mkreg <- function(n,beta=c(0.0),exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,nu=NA, rho=NA,alpha=10,tau=0.5,link="logit")
 {
   
-  exvar=as.matrix(exvar)
-  k=if(is.matrix(exvar)){ncol(exvar)}else{1}
-  X <- matrix(c(rep(1,n),exvar), nrow=n, ncol=(k+1), byrow=F)
+  exvar.beta=as.matrix(exvar.beta)
+  k=if(is.matrix(exvar.beta)){ncol(exvar.beta)}else{1}
+  X <- matrix(c(rep(1,n),exvar.beta), nrow=n, ncol=(k+1), byrow=F)
   
   
     ##funções de ligação
