@@ -536,7 +536,7 @@ imkreg0Z <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,graph=T,pr
   for(i in 1:n)
   {
     if(y[i]==0) ui[i] <- runif(1,0,lambda0hat[i])
-    if(y[i]!=0) ui[i] <- pmk(y[i],alpha=z$alpha,beta=log(1-tau)/den.cr[i], lambda0=lambda0hat[i],log.p = FALSE)
+    if(y[i]!=0) ui[i] <- pmk(y[i],alpha=alpha,beta=log(1-tau)/den.cr[i], lambda0=lambda0hat[i],log.p = FALSE)
   }
   z$residual <- residual <- qnorm(ui)
   
