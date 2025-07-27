@@ -200,12 +200,6 @@ imkreg0 <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,graph=T,pri
   }#end score
   
   # initial values for estimation
-  Ynew = linkfun(y[y!=0])
-  ajuste = lm.fit(as.matrix(X[y!=0,]), Ynew)
-  
-  mqo = c(ajuste$coef)
-  mqo[is.na(mqo)]<-0
-  
   library(GenSA)
   on.dmk.alpha<-function(alpha){-sum(log(dmk_alpha(alpha)))}
   
@@ -213,16 +207,8 @@ imkreg0 <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,graph=T,pri
                         upper = c(100),
                         fn = on.dmk.alpha, control=list(max.time=2))
   alpha<-gen.semchute$par
-   reg <- c(mqo, alpha,length(y[y==0])/length(y)) # initializing the parameter values
-  #reg <- c(mqo, 0,length(y[y==0])/length(y),rep(0,c)) # initializing the parameter values
+  reg <- c(linkfun(mean(y[y!=0])), alpha,length(y[y==0])/length(y)) # initializing the parameter values
   
-  # reg <- c(0,rep(0,k), alpha,length(y[which(y==0)])/length(y),rep(0,c)) # initializing the parameter values
-  # reg <- c(0,rep(0,k), 0,length(y[which(y==0)])/length(y),rep(0,c)) # initializing the parameter values
-  
-  #reg=c(0,0,alpha)
-  # reg <- c(mqo,0)
-  # print(reg)
-  z <- c()
   opt.error<- tryCatch(optim(reg, loglik, score,
                              method = "BFGS",
                              control = list(fnscale = -1)), error = function(e) return("error"))
@@ -726,8 +712,7 @@ imkreg0 <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,graph=T,pri
     return(sum(l))
   }
   
-  ini_null<- c(linkfun(mean(y[y!=0])),reg[k+2],length(y[y==0])/n)
-  # print(ini_null)
+  ini_null<- reg
   opti.error<- tryCatch(optim(ini_null, loglik_null,method = "BFGS", control = list(fnscale = -1)), error = function(e) return("error"))
   if(opti.error[1] == "error")
   {z$r2 <-NA

@@ -248,14 +248,7 @@ imkreg01 <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,graph=T,pr
                         fn = on.dmk.alpha, control=list(max.time=2))
   alpha<-gen.semchute$par
   reg <- c(mqo, alpha,length(y[y==0|y==1])/n,rep(0,c),length(y[y==1])/length(y[y==0|y==1]),rep(0,m)) # initializing the parameter values
-  #reg <- c(mqo, 0,length(y[y==0])/length(y),rep(0,c)) # initializing the parameter values
-  
-  # reg <- c(0,rep(0,k), alpha,length(y[which(y==0)])/length(y),rep(0,c)) # initializing the parameter values
-  # reg <- c(0,rep(0,k), 0,length(y[which(y==0)])/length(y),rep(0,c)) # initializing the parameter values
-  
-  #reg=c(0,0,alpha)
-  # reg <- c(mqo,0)
-  # print(reg)
+ 
   z <- c()
   # opt.error<- tryCatch(optim(reg, loglik, score,
   #                            method = "BFGS",
@@ -291,13 +284,8 @@ imkreg01 <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,graph=T,pr
   z$RMC=0
   lambdahat<-linkinv(Z%*%as.matrix(nu))
   phat<-linkinv(A%*%as.matrix(rho))
-  # print("z$coeff");print(z$coeff)
-  # print("rho");print(rho)
-  # print("phat");print(phat)
   muhat <- linkinv(X%*%as.matrix(beta))
   z$fitted<-ts(rimk(u=rep(0.5,n),mu=muhat,alpha=alpha,lambda=lambdahat,p=phat),start=start(y),frequency=frequency(y)) 
-  # print(z$fitted)
-  # plot(z$fitted,type="l")
   
   obs.inf<-function(y,muhat)
   {
@@ -859,7 +847,7 @@ imkreg01 <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,graph=T,pr
   }
   
   ini_null<- c(linkfun(mean(y[y!=0&y!=1])),reg[k+2],length(y[y==0|y==1])/n,length(y[y==1])/length(y[y==0|y==1]))
-  # print(ini_null)
+
   opti.error<- tryCatch(optim(ini_null, loglik_null,method = "BFGS", control = list(fnscale = -1)), error = function(e) return("error"))
   if(opti.error[1] == "error")
   {z$r2 <-NA
