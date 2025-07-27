@@ -253,6 +253,7 @@ imkreg1A <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,graph=T,pr
   rho<-coef[(k+3):(k+3+m)]
   z$beta <- beta
   z$rho<-rho
+  z$alpha<-alpha
   z$RMC=0
   lambda1hat<-linkinv(A%*%as.matrix(rho))
   muhat <- linkinv(X%*%as.matrix(beta))

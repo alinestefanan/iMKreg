@@ -10,8 +10,9 @@ imkreg1 <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,graph=T,pri
   
   A<-rep(1,n)
   m=0
-  k=0
-  X <- matrix(rep(1,n), nrow=n, ncol=(1), byrow=F)
+  exvar.beta=as.matrix(exvar.beta)
+  k=if(is.matrix(exvar.beta)){ncol(exvar.beta)}else{1}
+  X <- matrix(c(rep(1,n),exvar.beta), nrow=n, ncol=(k+1), byrow=F)
   
   ##funções de ligação
   linktemp <- substitute(link)
@@ -201,7 +202,7 @@ imkreg1 <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,graph=T,pri
   
   # initial values for estimation
   Ynew = linkfun(y[y!=1])
-  ajuste = lm.fit(as.matrix(X[y!=1,]), Ynew)
+  ajuste = lm.fit(X[y!=1,], Ynew)
   
   mqo = c(ajuste$coef)
   mqo[is.na(mqo)]<-0
@@ -250,8 +251,8 @@ imkreg1 <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,graph=T,pri
   alpha <-coef[(k+2)] # mk parameter
   rho<-coef[(k+3)]
   z$beta <- beta
-  z$rho<-rho
   z$alpha<-alpha
+  z$rho<-rho
   z$RMC=0
   lambda1hat<-linkinv(A*rho)
   muhat <- linkinv(X%*%as.matrix(beta))
@@ -750,12 +751,73 @@ imkreg1 <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,graph=T,pri
   z$ljungbox<-ljungbox$statistic
   z$p_ljungbox<-ljungbox$p.value
   
-  z$durbin<-NA
-  z$p_durbin<-NA
-
+  dw<-function(res){
+    alternative = "two.sided"
+    dw <- sum(diff(res)^2)/sum(res^2)
+    Q1 <- chol2inv(qr.R(qr(exvar.beta)))
+    if (n<100) {
+      A <- diag(c(1, rep(2, n - 2), 1))
+      A[abs(row(A) - col(A)) == 1] <- -1
+      MA <- diag(rep(1, n)) - exvar.beta %*% Q1 %*% t(exvar.beta)
+      MA <- MA %*% A
+      ev <- eigen(MA)$values[1:(n - k)]
+      if (any(Im(ev) > 1e-10)) 
+        warning("imaginary parts of eigenvalues discarded")
+      ev <- Re(ev)
+      ev <- ev[ev > 1e-10]
+      pdw <- function(dw) .Fortran("pan", as.double(c(dw, ev)), as.integer(length(ev)), as.double(0), 
+                                   as.integer(15), x = double(1), PACKAGE = "lmtest")$x
+      pval <- switch(alternative, two.sided = (2 * min(pdw(dw), 1 - pdw(dw))), less = (1 - pdw(dw)), greater = pdw(dw))
+      if (is.na(pval) || ((pval > 1) | (pval < 0))) {
+        warning("exact p value cannot be computed (not in [0,1]), approximate p value will be used")
+      }
+    }else{
+      if (n < max(5, k)) {
+        warning("not enough observations for computing an approximate p value, set to 1")
+        pval <- 1
+      }
+      else {
+        AX <- matrix(as.vector(filter(exvar.beta, c(-1, 2, -1))), ncol = k)
+        AX[1, ] <- exvar.beta[1, ] - exvar.beta[2, ]
+        AX[n, ] <- exvar.beta[n, ] - exvar.beta[(n - 1), ]
+        XAXQ <- t(exvar.beta) %*% AX %*% Q1
+        P <- 2 * (n - 1) - sum(diag(XAXQ))
+        Q <- 2 * (3 * n - 4) - 2 * sum(diag(crossprod(AX) %*% Q1)) + sum(diag(XAXQ %*% XAXQ))
+        dmean <- P/(n - k)
+        dvar <- 2/((n - k) * (n - k + 2)) * (Q - P * dmean)
+        pval <- switch(alternative, two.sided = (2 * pnorm(abs(dw - dmean), sd = sqrt(dvar), lower.tail = FALSE)), less = pnorm(dw, mean = dmean, sd = sqrt(dvar), lower.tail = FALSE), greater = pnorm(dw, mean = dmean, sd = sqrt(dvar)))
+      }
+    }
+    alternative <- switch(alternative, two.sided = "true autocorrelation is not 0", less = "true autocorrelation is less than 0", greater = "true autocorrelation is greater than 0")
+    names(dw) <- "DW"
+    RVAL <- list(statistic = dw, method = "Durbin-Watson test", 
+                 alternative = alternative, p.value = pval)
+    class(RVAL) <- "htest"
+    return(RVAL)
+  }
+  durbin<-dw(residual)
+  z$durbin<-durbin$statistic
+  z$p_durbin<-durbin$p.value
+  #null hypothesis: non-multicollinearity
+  z$cor.beta <- cor(exvar.beta)                                         # independent variables correlation matrix 
+  
   #null hypothesis: non-heteroscedasticity (constant variance)
-  z$breusch=NA
-  z$p_breusch=NA
+   SBP<-function(resi){#adapted to fits a linear regression model to the residuals of the mkreg model 
+    sigma2 <- sum(resi^2)/length(resi)
+    w <- resi^2 - sigma2
+    aux <- lm.fit(exvar.beta, w)
+    bp <- n * sum(aux$fitted.values^2)/sum(w^2)
+    method <- "studentiAed Breusch-Pagan test"
+    names(bp) <- "BP"
+    df <- c(df = aux$rank - 1)
+    RVAL <- list(statistic = bp, parameter = df, method = method, 
+                 p.value = pchisq(bp, df, lower.tail = FALSE))
+    class(RVAL) <- "htest"
+    return(RVAL)
+  }
+  breusch=SBP(residual)
+  z$breusch=breusch$statistic
+  z$p_breusch=breusch$p.value
   
   rownames(z$accuracyfitted) <-rownames(accuracy) <- c("Accuracy fitted")
   if(n<=5000){
