@@ -1,22 +1,22 @@
 # y: time series
 # S: seasonal periodicity
-# exvar.nu: covariate column matrix
+# exvar.beta,exvar.nu: covariate column matrix
 # tau: quantil, when set 0.5 is the median
 # link: "logit", "probit" or "cloglog"
 
-imkreg0Z1 <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,graph=T,print=T,check=F,link="logit")
+imkreg01 <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,graph=T,print=T,check=F,link="logit")
 {
   n <- length(y) 
   
-  exvar.nu=as.matrix(exvar.nu)
-  c=if(is.matrix(exvar.nu)){ncol(exvar.nu)}else{1}
-  Z<-matrix(c(rep(1,n),exvar.nu), nrow=n, ncol=(c+1), byrow=F)
+  c<-0
+  Z<-matrix(rep(1,n), nrow=n, ncol=(1), byrow=F)
   
   m=0
-  A<-matrix(rep(1,n), nrow=n, ncol=1, byrow=F)
+  A<-matrix(rep(1,n), nrow=n, ncol=(1), byrow=F)
  
-  k=0
-  X <- matrix(rep(1,n), nrow=n, ncol=1, byrow=F)
+  exvar.beta=as.matrix(exvar.beta)
+  k=if(is.matrix(exvar.beta)){ncol(exvar.beta)}else{1}
+  X <- matrix(c(rep(1,n),exvar.beta), nrow=n, ncol=(k+1), byrow=F)
   
   ##funções de ligação
   linktemp <- substitute(link)
@@ -234,7 +234,12 @@ imkreg0Z1 <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,graph=T,p
   }#end score
   
   # initial values for estimation
-
+  Ynew = linkfun(y[y!=0 & y!=1])
+  ajuste = lm.fit(X[y!=0 & y!=1,], Ynew)
+  
+  mqo = c(ajuste$coef)
+  mqo[is.na(mqo)]<-0
+  
   library(GenSA)
   on.dmk.alpha<-function(alpha){-sum(log(dmk_alpha(alpha)))}
   
@@ -242,7 +247,7 @@ imkreg0Z1 <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,graph=T,p
                         upper = c(100),
                         fn = on.dmk.alpha, control=list(max.time=2))
   alpha<-gen.semchute$par
-  reg <- c(linkfun(mean(y[y!=0&y!=1])), alpha,length(y[y==0|y==1])/n,rep(0,c),length(y[y==1])/length(y[y==0|y==1]),rep(0,m)) # initializing the parameter values
+  reg <- c(mqo, alpha,length(y[y==0|y==1])/n,rep(0,c),length(y[y==1])/length(y[y==0|y==1]),rep(0,m)) # initializing the parameter values
   #reg <- c(mqo, 0,length(y[y==0])/length(y),rep(0,c)) # initializing the parameter values
   
   # reg <- c(0,rep(0,k), alpha,length(y[which(y==0)])/length(y),rep(0,c)) # initializing the parameter values
@@ -533,7 +538,7 @@ imkreg0Z1 <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,graph=T,p
     return(K)
   }
   K<-obs.inf(y,muhat)
-  #print(K)
+  # print(K)
   Ksolve<- tryCatch(solve(K), error = function(e) return("error"))
   if(Ksolve[1] == "error")
   {z$RMC=1#used at Monte-Carlo simulation for discard from the sample
@@ -620,7 +625,7 @@ imkreg0Z1 <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,graph=T,p
   ###########################
   
   z$serie <- y
-
+  
   muhat[is.na(muhat)]<-.Machine$double.eps
   muhat[muhat<.Machine$double.eps]<-.Machine$double.eps
   muhat[muhat>0.9999999]<-0.9999999
@@ -643,13 +648,13 @@ imkreg0Z1 <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,graph=T,p
     if(y[i]!=0 & y[i]!=1) ui[i] <- pmk(y[i],alpha=z$alpha,beta=log(1-tau)/den.cr[i], lambda=lambdahat[i],p=phat[i],log.p = FALSE)
   }
   z$residual <- residual <- qnorm(ui)
-
+  
   mresult<-matrix(round(c(z$loglik,z$aic,z$bic),4),nrow=3,ncol=1)
   rownames(mresult)<-c("Log-likelihood","AIC","BIC")
   colnames(mresult)<-c("")
   z$mresult<-mresult
   
- 
+  
   
   ###################################################
   ######### GRAPHICS ################################
@@ -691,79 +696,62 @@ imkreg0Z1 <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,graph=T,p
       }
     }
     dev.off()
-   
-    pdf("cor_y_covZ.pdf",width=5, height=4)
-    {
-      if (c<=3){
-        par(mfrow=c(1,c))
-        par(mar=c(2.8, 2.7, 1, 1))
-        par(mgp=c(1.7, 0.45, 0))}
-      # for (i in k){
-      # plot(as.vector(X[,1+i]),as.vector(y),main=" ",xlab=paste("Cov ",i),ylab="y")
-      # }
-      if(c==1){
-        plot(as.vector(Z[,2]),as.vector(y),main=" ",xlab=paste("Cov Z1"),ylab="y")#,legend("topleft",paste("cor=",cor(X[,2],y))))#,#pch=vpch,
-        text(x = median(as.vector(Z[,2])), y = median(as.vector(y)), label = paste("cor=",round(cor(Z[,2],y),4)), cex = 1)
-      }
-      if (c==2){
-        plot(as.vector(Z[,2]),as.vector(y),main=" ",xlab=paste("Cov Z1"),ylab="y")#,legend("topleft",paste("cor=",cor(X[,2],y))))
-        text(x = median(as.vector(Z[,2])), y = median(as.vector(y)), label = paste("cor=",round(cor(Z[,2],y),4)), cex = 1)
-        
-        plot(as.vector(Z[,3]),as.vector(y),main=" ",xlab=paste("Cov Z2"),ylab="y")
-        text(x = median(as.vector(Z[,3])), y = median(as.vector(y)), label = paste("cor=",round(cor(Z[,3],y),4)), cex = 1)
-      }
-      if (c==3){
-        plot(as.vector(Z[,2]),as.vector(y),main=" ",xlab=paste("Cov Z1"),ylab="y")#,legend("topleft",paste("cor=",cor(X[,2],y)),pt.bg="white", lty=c(1,2), bty="n"))
-        text(x = median(as.vector(Z[,2])), y = median(as.vector(y)), label = paste("cor=",round(cor(Z[,2],y),4)), cex = 1)
-        
-        plot(as.vector(Z[,3]),as.vector(y),main=" ",xlab=paste("Cov Z2"),ylab="y")
-        text(x = median(as.vector(Z[,3])), y = median(as.vector(y)), label = paste("cor=",round(cor(Z[,3],y),4)), cex = 1)
-        
-        plot(as.vector(Z[,4]),as.vector(y),main=" ",xlab=paste("Cov Z3"),ylab="y")
-        text(x = median(as.vector(Z[,4])), y = median(as.vector(y)), label = paste("cor=",round(cor(Z[,4],y),4)), cex = 1)
-      }
-    }
-    dev.off()
-    if(c>1){
-      pdf("cor_covZ_covZ.pdf",width=5, height=4)
+    if(k>1){
+      pdf("cor_covX_covX.pdf",width=5, height=4)
       {
-        if (c==2){
+        if (k==2){
           par(mfrow=c(1,1))
           par(mar=c(2.8, 2.7, 1, 1))
           par(mgp=c(1.7, 0.45, 0))
           
-          plot(as.vector(Z[,3]),as.vector(Z[,2]),main=" ",xlab=paste("Cov Z2"),ylab="Cov Z1")
-          text(x = median(as.vector(Z[,3])), y = median(as.vector(Z[,2])), label = paste("cor=",round(cor(Z[,3],Z[,2]),4)), cex = 1)
+          plot(as.vector(X[,3]),as.vector(X[,2]),main=" ",xlab=paste("Cov X2"),ylab="Cov X1")
+          text(x = median(as.vector(X[,3])), y = median(as.vector(X[,2])), label = paste("cor=",round(cor(X[,3],X[,2]),4)), cex = 1)
         }
-        if (c==3){
+        if (k==3){
           par(mfrow=c(1,3))
           par(mar=c(2.8, 2.7, 1, 1))
           par(mgp=c(1.7, 0.45, 0))
           
-          plot(as.vector(Z[,3]),as.vector(Z[,2]),main=" ",xlab=paste("Cov Z2"),ylab="Cov Z1")
-          text(x = median(as.vector(Z[,3])), y = median(as.vector(Z[,2])), label = paste("cor=",round(cor(Z[,3],Z[,2]),4)), cex = 1)
+          plot(as.vector(X[,3]),as.vector(X[,2]),main=" ",xlab=paste("Cov X2"),ylab="Cov X1")
+          text(x = median(as.vector(X[,3])), y = median(as.vector(X[,2])), label = paste("cor=",round(cor(X[,3],X[,2]),4)), cex = 1)
           
-          plot(as.vector(Z[,4]),as.vector(Z[,2]),main=" ",xlab=paste("Cov Z3"),ylab="Cov Z1")
-          text(x = median(as.vector(Z[,4])), y = median(as.vector(Z[,2])), label = paste("cor=",round(cor(Z[,4],Z[,2]),4)), cex = 1)
+          plot(as.vector(X[,4]),as.vector(X[,2]),main=" ",xlab=paste("Cov X3"),ylab="Cov X1")
+          text(x = median(as.vector(X[,4])), y = median(as.vector(X[,2])), label = paste("cor=",round(cor(X[,4],X[,2]),4)), cex = 1)
           
-          plot(as.vector(Z[,4]),as.vector(Z[,3]),main=" ",xlab=paste("Cov Z3"),ylab="Cov Z2")
-          text(x = median(as.vector(Z[,4])), y = median(as.vector(Z[,3])), label = paste("cor=",round(cor(Z[,4],Z[,3]),4)), cex = 1)
+          plot(as.vector(X[,4]),as.vector(X[,3]),main=" ",xlab=paste("Cov X3"),ylab="Cov X2")
+          text(x = median(as.vector(X[,4])), y = median(as.vector(X[,3])), label = paste("cor=",round(cor(X[,4],X[,3]),4)), cex = 1)
           
         }
       }
       dev.off()
       
-      pdf("cor_matrix_covZ.pdf",width=5, height=4)
+      pdf("cor_matrix_covX.pdf",width=5, height=4)
       {
         par(mfrow=c(1,1))
         par(mar=c(2.8, 2.7, 1, 1))
         par(mgp=c(1.7, 0.45, 0))
         library(corrplot)
-        corrplot(cor(exvar.nu),method='number')              # visualize the multicollinearity
+        corrplot(cor(exvar.beta),method='number')              # visualize the multicollinearity
       }
       dev.off()
     }
 
+    pdf("resid_v_ind.pdf",width=5, height=4)
+    {
+      par(mfrow=c(1,1))
+      par(mar=c(2.8, 2.7, 1, 1))
+      par(mgp=c(1.7, 0.45, 0))
+      plot(residual,main=" ",xlab="Index",ylab="Residuals", pch = "+",ylim=c(-4,4))
+      lines(t,rep(-3,n+12)#length(residual))
+            ,lty=2,col=1)
+      lines(t,rep(3,n+12)#length(residual))
+            ,lty=2,col=1)
+      lines(t,rep(-2,n+12)#length(residual))
+            ,lty=3,col=1)
+      lines(t,rep(2,n+12)#length(residual))
+            ,lty=3,col=1)
+    }
+    dev.off()
     pdf("resid_v_fitted.pdf",width=5, height=4)
     {
       par(mfrow=c(1,1))
@@ -870,45 +858,14 @@ imkreg0Z1 <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,graph=T,p
     return(sum(l))
   }
   
-  # loglik_null <- function(z)
-  # {
-  #   beta <- z[1]
-  #   alpha <- z[2]
-  #   lambda_null<-length(which(y==0 | y==1))/n
-  #  # p_null<-length(which(y==1))/length(which(y==0 | y==1))
-  #   mu <- linkinv(X[,1]*beta)
-  #   mu[is.na(mu)]<-.Machine$double.eps
-  #   mu[mu<.Machine$double.eps]<-.Machine$double.eps
-  #   mu[mu>0.9999999]<-0.9999999
-  #   critical<-alpha-alpha/mu
-  #   critical[is.na(critical)]<--.Machine$double.eps
-  #   critical[is.nan(critical)]<--36.04365
-  #   critical[critical< (-36.04365)]<--36.04365
-  #   den.cr=log(1-exp(critical))
-  #   den.cr[is.nan(den.cr)]<--36.04365
-  #   critical.y<-exp(alpha-alpha/y)
-  #   critical.y[is.infinite(critical.y)]<-.Machine$double.xmax
-  #   critical.ly<-log(1-critical.y)
-  #   critical.ly[is.nan(critical.ly)]<--36.04365
-  #   critical.ly[critical.ly< (-36.04365)]<--36.04365#para exp dar .Machine$double.eps
-  #   l=ifelse(y!=0 & y!=1,log(1-lambda_null)+log(alpha)+alpha-alpha/y+(log(1-tau)/den.cr -1)*critical.ly-2*log(y)+log(log(1-tau)/den.cr),0)
-  #   return(sum(l))
-  # }
-  # 
-  # ini_null<- c(linkfun(mean(y[y!=0&y!=1])),reg[k+2])
-  
-  
   ini_null<- c(linkfun(mean(y[y!=0&y!=1])),reg[k+2],length(y[y==0|y==1])/n,length(y[y==1])/length(y[y==0|y==1]))
   # print(ini_null)
-  #opti.error<- tryCatch(optim(ini_null, loglik_null,method = "BFGS", control = list(fnscale = -1)), error = function(e) return("error"))
-  # if(opti.error[1] == "error")
-  # {z$r2 <-NA
-  # }else{
-  opt_null <- optim(ini_null, loglik_null,method = "BFGS", control = list(fnscale = -1)) # , maxit = 500, reltol = 1e-9))
-  #opt_null<-optim(alpha,on.dmk.alpha,method = "BFGS")
+  opti.error<- tryCatch(optim(ini_null, loglik_null,method = "BFGS", control = list(fnscale = -1)), error = function(e) return("error"))
+  if(opti.error[1] == "error")
+  {z$r2 <-NA
+  }else{opt_null <- optim(ini_null, loglik_null,method = "BFGS", control = list(fnscale = -1)) # , maxit = 500, reltol = 1e-9))
   r2 <- 1-exp((-2/n)*(opt$value-opt_null$value))
-  z$r2 <- r2
-  #}
+  z$r2 <- r2}
   # print(z$r2)
   #null hypothesis: normality
   library(nortest)
@@ -923,7 +880,7 @@ imkreg0Z1 <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,graph=T,p
   }
   # print(z$p_andersondarling)
   
-  #non autocorrelated
+  #null hypothesis: non autocorrelated
   ljungbox<- Box.test(residual, lag = 10, type = "Ljung-Box", fitdf = k)
   z$ljungbox<-ljungbox$statistic
   z$p_ljungbox<-ljungbox$p.value
@@ -931,13 +888,13 @@ imkreg0Z1 <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,graph=T,p
   dw<-function(res){
     alternative = "two.sided"
     dw <- sum(diff(res)^2)/sum(res^2)
-    Q1 <- chol2inv(qr.R(qr(exvar.nu)))
+    Q1 <- chol2inv(qr.R(qr(exvar.beta)))
     if (n<100) {
       A <- diag(c(1, rep(2, n - 2), 1))
       A[abs(row(A) - col(A)) == 1] <- -1
-      MA <- diag(rep(1, n)) - exvar.nu %*% Q1 %*% t(exvar.nu)
+      MA <- diag(rep(1, n)) - exvar.beta %*% Q1 %*% t(exvar.beta)
       MA <- MA %*% A
-      ev <- eigen(MA)$values[1:(n - c)]
+      ev <- eigen(MA)$values[1:(n - k)]
       if (any(Im(ev) > 1e-10)) 
         warning("imaginary parts of eigenvalues discarded")
       ev <- Re(ev)
@@ -949,19 +906,19 @@ imkreg0Z1 <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,graph=T,p
         warning("exact p value cannot be computed (not in [0,1]), approximate p value will be used")
       }
     }else{
-      if (n < max(5, c)) {
+      if (n < max(5, k)) {
         warning("not enough observations for computing an approximate p value, set to 1")
         pval <- 1
       }
       else {
-        AX <- matrix(as.vector(filter(exvar.nu, c(-1, 2, -1))), ncol = c)
-        AX[1, ] <- exvar.nu[1, ] - exvar.nu[2, ]
-        AX[n, ] <- exvar.nu[n, ] - exvar.nu[(n - 1), ]
-        XAXQ <- t(exvar.nu) %*% AX %*% Q1
+        AX <- matrix(as.vector(filter(exvar.beta, c(-1, 2, -1))), ncol = k)
+        AX[1, ] <- exvar.beta[1, ] - exvar.beta[2, ]
+        AX[n, ] <- exvar.beta[n, ] - exvar.beta[(n - 1), ]
+        XAXQ <- t(exvar.beta) %*% AX %*% Q1
         P <- 2 * (n - 1) - sum(diag(XAXQ))
         Q <- 2 * (3 * n - 4) - 2 * sum(diag(crossprod(AX) %*% Q1)) + sum(diag(XAXQ %*% XAXQ))
-        dmean <- P/(n - c)
-        dvar <- 2/((n - c) * (n - c + 2)) * (Q - P * dmean)
+        dmean <- P/(n - k)
+        dvar <- 2/((n - k) * (n - k + 2)) * (Q - P * dmean)
         pval <- switch(alternative, two.sided = (2 * pnorm(abs(dw - dmean), sd = sqrt(dvar), lower.tail = FALSE)), less = pnorm(dw, mean = dmean, sd = sqrt(dvar), lower.tail = FALSE), greater = pnorm(dw, mean = dmean, sd = sqrt(dvar)))
       }
     }
@@ -975,13 +932,14 @@ imkreg0Z1 <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,graph=T,p
   durbin<-dw(residual)
   z$durbin<-durbin$statistic
   z$p_durbin<-durbin$p.value
-  #null hypothesis: non-multicollinearity                                         # independent variables correlation matrix 
-  z$cor.nu <- cor(exvar.nu)
+  #null hypothesis: non-multicollinearity
+  z$cor.beta <- cor(exvar.beta)                                         # independent variables correlation matrix 
+  
   #null hypothesis: non-heteroscedasticity (constant variance)
    SBP<-function(resi){#adapted to fits a linear regression model to the residuals of the mkreg model 
     sigma2 <- sum(resi^2)/length(resi)
     w <- resi^2 - sigma2
-    aux <- lm.fit(exvar.nu, w)
+    aux <- lm.fit(exvar.beta, w)
     bp <- n * sum(aux$fitted.values^2)/sum(w^2)
     method <- "studentized Breusch-Pagan test"
     names(bp) <- "BP"
@@ -1026,6 +984,7 @@ imkreg0Z1 <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,graph=T,p
     message("")
     print(z$accuracyfitted)
     message("")
+    
   }
   
   if(check==TRUE){
