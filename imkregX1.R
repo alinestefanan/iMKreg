@@ -1,5 +1,3 @@
-# y: time series
-# S: seasonal periodicity
 # exvar.beta: covariate column matrix
 # tau: quantil, when set 0.5 is the median
 # link: "logit", "probit" or "cloglog"
