@@ -633,41 +633,6 @@ mkreg01 <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,resid=1,gra
   ########################   residual analysis   ########################
   ########################################################################
   
-  loglik_null <- function(z)
-  {
-    beta <- z[1]
-    alpha <- z[2]
-    mu <- linkinv(X[,1]*beta)
-    mu[is.na(mu)]<-.Machine$double.eps
-    mu[mu<.Machine$double.eps]<-.Machine$double.eps
-    mu[mu>0.9999999]<-0.9999999
-    critical<-alpha-alpha/mu
-    critical[is.na(critical)]<--.Machine$double.eps
-    critical[is.nan(critical)]<--36.04365
-    critical[critical< (-36.04365)]<--36.04365
-    den.cr=log(1-exp(critical))
-    den.cr[is.nan(den.cr)]<--36.04365
-    critical.y<-exp(alpha-alpha/y)
-    critical.y[is.infinite(critical.y)]<-.Machine$double.xmax
-    critical.ly<-log(1-critical.y)
-    critical.ly[is.nan(critical.ly)]<--36.04365
-    critical.ly[critical.ly< (-36.04365)]<--36.04365#para exp dar .Machine$double.eps
-    l=log(alpha)+alpha-alpha/y+(log(1-tau)/den.cr -1)*critical.ly-2*log(y)+log(log(1-tau)/den.cr)
-    return(sum(l))
-  }
-  # ini_null<- c(reg[1],reg[length(opt$par)])
-  ini_null<- c(linkfun(mean(y)),reg[length(opt$par)])
-  opti.error<- tryCatch(optim(ini_null, loglik_null,method = "BFGS", control = list(fnscale = -1)), error = function(e) return("error"))
-  if(opti.error[1] == "error")
-  {z$r2 <-NA
-  }else{opt_null <- optim(ini_null, loglik_null,method = "BFGS", control = list(fnscale = -1)) # , maxit = 500, reltol = 1e-9))
-  r2 <- 1-exp((-2/n)*(opt$value-opt_null$value))
-  z$r2 <- r2}
-  
-  # r2 <- 1-exp((-2/n)*(opt$value-sum(l_tilde)))
-  # z$r2 <- r2
-  # print(z$r2)
-  
   #null hypothesis: normality
   library(nortest)
   andersondarling=ad.test(residual)
@@ -775,7 +740,6 @@ mkreg01 <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,resid=1,gra
     print(c("Log-likelihood =",round(z$loglik,4)),quote=F)
     print(c("aic =",round(z$aic,4),"bic =",round(z$bic,4)),quote=F)
     print(c("Deviance =",round(z$deviance,4)," DF:",z$dof.dev),quote=F)
-    print(c("R-squared=",round(z$r2,4)),quote=F)
     message("")  
     if(resid==1) {
       print("Quantile residuals:",quote=F)

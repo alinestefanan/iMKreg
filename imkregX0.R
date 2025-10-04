@@ -13,7 +13,7 @@ imkreg0 <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,graph=T,pri
   exvar.beta=as.matrix(exvar.beta)
   k=if(is.matrix(exvar.beta)){ncol(exvar.beta)}else{1}
   X <- matrix(c(rep(1,n),exvar.beta), nrow=n, ncol=(k+1), byrow=F)
-  
+  m=0
   ##funções de ligação
   linktemp <- substitute(link)
   if (!is.character(linktemp))
@@ -422,7 +422,7 @@ imkreg0 <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,graph=T,pri
   }else{sol=try(solve(K))}
   
   v<-diag(sol)#Variância assintótica dos esimadores
-  #print(v)
+
   for (i in 1:length(v))
   {
     if(is.na(v[i]) | is.nan(v[i]) | v[i]<0 )  {
@@ -432,8 +432,9 @@ imkreg0 <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,graph=T,pri
     }
   }
   
+  
   z$zstat<-z$coeff/sqrt(v)
-  #print(z$zstat)
+
   resp<-rep(0,length(z$zstat))
   for (i in 1:length(resp)){
     if(abs(z$zstat[i])>qnorm(0.975))
@@ -674,16 +675,7 @@ imkreg0 <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,graph=T,pri
       lines(c(-10,10),c(-10,10),lty=2)
     }
     dev.off()
-    pdf("envelope_plot.pdf",width=5, height=4)
-    {
-      par(mfrow=c(1,1))
-      par(mar=c(2.8, 2.7, 1, 1))
-      par(mgp=c(1.7, 0.45, 0))
-      source("envelope.imkregX0.R")
-      envelope.mkreg(residual=z$residual,n=n,beta=beta,exvar.beta=exvar.beta,nu=nu,alpha=alpha,tau=tau,link="logit")
-      #fazer 1000 réplicas, ordenar e calcular bandas de confiança
-    }
-    dev.off()
+    
     pdf("adjusted.pdf",width=5, height=4)
     {
       par(mfrow=c(1,1))
@@ -702,40 +694,7 @@ imkreg0 <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,graph=T,pri
   ########################################################################
   ########################   residual analysis   ########################
   ########################################################################
-  loglik_null <- function(z)
-  {
-    beta <- z[1]
-    alpha <- z[2]
-    nu<-z[3]
-    lambda0<-linkinv(Z[,1]*nu)
-    mu <- linkinv(X[,1]*beta)
-    mu[is.na(mu)]<-.Machine$double.eps
-    mu[mu<.Machine$double.eps]<-.Machine$double.eps
-    mu[mu>0.9999999]<-0.9999999
-    critical<-alpha-alpha/mu
-    critical[is.na(critical)]<--.Machine$double.eps
-    critical[is.nan(critical)]<--36.04365
-    critical[critical< (-36.04365)]<--36.04365
-    den.cr=log(1-exp(critical))
-    den.cr[is.nan(den.cr)]<--36.04365
-    critical.y<-exp(alpha-alpha/y)
-    critical.y[is.infinite(critical.y)]<-.Machine$double.xmax
-    critical.ly<-log(1-critical.y)
-    critical.ly[is.nan(critical.ly)]<--36.04365
-    critical.ly[critical.ly< (-36.04365)]<--36.04365#para exp dar .Machine$double.eps
-    l=ifelse(y==0,log(lambda0),log(1-lambda0)+log(alpha)+alpha-alpha/y+(log(1-tau)/den.cr -1)*critical.ly-2*log(y)+log(log(1-tau)/den.cr))
-    return(sum(l))
-  }
-  
-  ini_null<- c(linkfun(mean(y[y!=0])),reg[k+2],length(y[y==0])/n)
-  # print(ini_null)
-  opti.error<- tryCatch(optim(ini_null, loglik_null,method = "BFGS", control = list(fnscale = -1)), error = function(e) return("error"))
-  if(opti.error[1] == "error")
-  {z$r2 <-NA
-  }else{opt_null <- optim(ini_null, loglik_null,method = "BFGS", control = list(fnscale = -1)) # , maxit = 500, reltol = 1e-9))
-  r2 <- 1-exp((-2/n)*(opt$value-opt_null$value))
-  z$r2 <- r2}
-  # print(z$r2)
+
   #null hypothesis: normality
   library(nortest)
   andersondarling=ad.test(residual)
@@ -848,7 +807,6 @@ imkreg0 <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,graph=T,pri
     message("")
     print(c("Log-likelihood =",round(z$loglik,4)),quote=F)
     print(c("aic =",round(z$aic,4),"bic =",round(z$bic,4)),quote=F)
-    print(c("R-squared=",round(z$r2,4)),quote=F)
     message("")  
     print("Randomized quantile residuals:",quote=F)
     print(summary(z$residual))
