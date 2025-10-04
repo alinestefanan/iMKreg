@@ -1,5 +1,3 @@
-# y: time series
-# S: seasonal periodicity
 # exvar.beta,exvar.nu: covariate column matrix
 # tau: quantil, when set 0.5 is the median
 # link: "logit", "probit" or "cloglog"
@@ -1048,4 +1046,5 @@ imkreg01A <- function(y,exvar.beta=NA,exvar.nu=NA,exvar.rho=NA,tau=0.5,graph=T,p
   
   return(z)
 }#fim estimação
+
 
