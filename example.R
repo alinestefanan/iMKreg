@@ -10,5 +10,6 @@ y<-sample.mkreg(n,exvar.beta=exvar.beta,exvar.nu=exvar.nu,exvar.rho=exvar.rho,be
 
 #iMKreg FIT
 source("fit.R")
-iMK<-mkreg(y,exvar.beta=exvar.beta,exvar.nu=exvar.nu,exvar.rho=exvar.rho,graph=F)
+iMK<-mkreg(y,exvar.beta=exvar.beta,exvar.nu=exvar.nu,exvar.rho=exvar.rho)
+
 
